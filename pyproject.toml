@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reposhield"
+version = "0.3.0"
+description = "RepoShield v0.3: OpenAI-compatible governance gateway, InstructionIR, policy plugin runtime, Studio, and gateway benchmark suite"
+readme = "README.zh-CN.md"
+requires-python = ">=3.10"
+authors = [{ name = "RepoShield Demo" }]
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8", "PyYAML>=6"]
+yaml = ["PyYAML>=6"]
+
+[project.scripts]
+reposhield = "reposhield.cli:main"
+peposhield = "reposhield.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"

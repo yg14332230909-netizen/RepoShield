@@ -1,0 +1,5 @@
+{
+  "ok": true,
+  "errors": [],
+  "audit": "reports/gateway_demo_run/gateway_audit.jsonl"
+}

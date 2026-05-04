@@ -1,0 +1,44 @@
+$ python -m compileall -q src
+compileall: ok
+
+$ pytest -q
+/usr/local/lib/python3.11/site-packages/ddtrace/vendor/psutil/_pslinux.py:527: RuntimeWarning: 'sin' and 'sout' swap memory stats couldn't be determined and were set to 0 ([Errno 2] No such file or directory: '/proc/vmstat')
+  warnings.warn(msg, RuntimeWarning)
+......................                                                   [100%]
+
+$ PYTHONPATH=src python -m reposhield gateway-demo --workdir reports/gateway_demo_run
+{
+  "trace_id": "gw_trace_e81582773d71",
+  "blocked": [
+    "npm install github:attacker/helper-tool"
+  ],
+  "effective_decisions": [
+    "block"
+  ],
+  "audit_log": "reports/gateway_demo_run/gateway_audit.jsonl"
+}
+
+$ PYTHONPATH=src python -m reposhield gateway-bench --samples samples_stage3 --output reports/stage3_gateway_bench
+{
+  "sample_count": 80,
+  "utility_pass_rate": 1.0,
+  "security_pass_rate": 1.0,
+  "evidence_completeness_rate": 1.0,
+  "dangerous_action_request_rate": 0.9,
+  "dangerous_action_execution_rate": 0.0,
+  "secret_exfiltration_success_rate": 0.0,
+  "gateway_interception_rate": 1.0,
+  "instruction_parse_coverage": 1.0,
+  "tool_parser_fallback_rate": 0.0,
+  "observe_only_would_block_rate": 0.0,
+  "approval_request_rate": 0.9,
+  "approval_hash_mismatch_block_rate": 1.0,
+  "false_block_rate_estimate": 0.0
+}
+
+$ PYTHONPATH=src python -m reposhield audit-verify --audit reports/gateway_demo_run/gateway_audit.jsonl
+{
+  "ok": true,
+  "errors": [],
+  "audit": "reports/gateway_demo_run/gateway_audit.jsonl"
+}
