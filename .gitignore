@@ -251,3 +251,7 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# generated reports and local verification outputs
+reports/
+TEST_RUN_RESULT.txt

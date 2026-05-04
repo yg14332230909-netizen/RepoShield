@@ -38,7 +38,7 @@ src/reposhield/registry/         source/user two-layer registry + taint store
 src/reposhield/studio/           HTML Studio dashboard
 src/reposhield/gateway_bench.py  80 个 Gateway Bench 样本生成与评分
 samples_stage3/                  v0.3 Gateway Bench 样本
-reports/                         demo、bench、studio、incident 报告
+reports/                         本地生成的 demo、bench、studio、incident 报告
 ```
 
 ## 核心能力
@@ -185,7 +185,7 @@ Gateway Bench                  -> 80 samples, security_pass_rate=1.0
 Audit verify                   -> ok=true
 ```
 
-详见 [TEST_RUN_RESULT.txt](TEST_RUN_RESULT.txt)。
+详见本地生成的测试输出，公开仓库不再跟踪该结果文件。
 
 ## 文档入口
 
