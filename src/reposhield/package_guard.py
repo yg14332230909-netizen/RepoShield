@@ -128,6 +128,7 @@ class PackageGuard:
         registry = self._registry_from_command(action.raw_action) or self._registry_from_config() or "official_or_default"
         lockfile_reasons = self._lockfile_reasons(manager)
         metadata_reasons = self._local_metadata_reasons(manager, package)
+        provenance_reasons = self._offline_provenance_reasons(package)
         reason_codes: list[str] = []
         risk = "high"
         decision = "approval_required"
@@ -144,6 +145,10 @@ class PackageGuard:
             risk = "critical"
         reason_codes.extend(lockfile_reasons)
         reason_codes.extend(metadata_reasons)
+        reason_codes.extend(provenance_reasons)
+        if any(r.startswith("package_provenance_denied") or r.startswith("package_reputation_low") for r in provenance_reasons):
+            risk = "critical"
+            decision = "block_or_high_approval"
         if "lockfile_missing" in lockfile_reasons and manager in {"npm", "poetry", "cargo", "go"}:
             decision = "approval_required_lockfile_diff"
         if not reason_codes:
@@ -230,6 +235,32 @@ class PackageGuard:
                 text = req.read_text(encoding="utf-8", errors="ignore").lower()
                 normalized = package.split("==", 1)[0].lower()
                 reasons.append("requirements_contains_target" if normalized in text else "requirements_diff_required")
+        return reasons
+
+    def _offline_provenance_reasons(self, package: str | None) -> list[str]:
+        if not package:
+            return []
+        oracle = self.repo_root / ".reposhield" / "package_metadata.json"
+        if not oracle.exists():
+            return ["package_metadata_unavailable"]
+        try:
+            data = json.loads(oracle.read_text(encoding="utf-8"))
+        except Exception:
+            return ["package_metadata_unreadable"]
+        meta = data.get(package) or data.get(package.split("==", 1)[0])
+        if not isinstance(meta, dict):
+            return ["package_metadata_missing"]
+        reasons: list[str] = []
+        if meta.get("deny"):
+            reasons.append("package_provenance_denied")
+        if meta.get("reputation") == "low":
+            reasons.append("package_reputation_low")
+        if meta.get("sigstore") is True or meta.get("provenance") == "verified":
+            reasons.append("package_provenance_verified")
+        else:
+            reasons.append("package_provenance_unverified")
+        if meta.get("integrity"):
+            reasons.append("package_integrity_pinned")
         return reasons
 
     def _extract_package(self, raw: str) -> str | None:

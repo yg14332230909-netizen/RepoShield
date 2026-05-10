@@ -120,6 +120,7 @@ class RepoShieldControlPlane:
             self.audit.append("memory_event", asdict(record), task_id=self.contract.task_id, actor="memory_store", source_ids=action.source_ids, action_id=action.action_id)
         elif action.semantic_action == "memory_read":
             self.audit.append("memory_event", {"event": "memory_read_requested", "raw_action_hash": action.raw_action}, task_id=self.contract.task_id, actor="memory_store", source_ids=action.source_ids, action_id=action.action_id)
+        self._apply_memory_authorization_gate(action)
 
         # First decision: may already hard-block before sandbox. Preflight can enrich evidence for high-risk actions.
         decision = self.policy.decide(self.contract, action, self.asset_graph, self.provenance.graph, package_event=package_event, secret_event=secret_event)
@@ -139,6 +140,36 @@ class RepoShieldControlPlane:
 
         self.audit.append("policy_decision", asdict(decision), task_id=self.contract.task_id, actor="policy_engine", source_ids=action.source_ids, action_id=action.action_id, decision_id=decision.decision_id)
         return action, decision
+
+    def _apply_memory_authorization_gate(self, action: ActionIR) -> None:
+        use = self._authorization_use(action.semantic_action)
+        if not use:
+            return
+        denied: list[dict[str, str]] = []
+        for sid in action.source_ids:
+            src = self.provenance.graph.get(sid)
+            if not src or src.source_type != "memory":
+                continue
+            memory_id = sid.removeprefix("src_")
+            ok, reason = self.memory.can_authorize(memory_id, use)
+            if not ok:
+                denied.append({"source_id": sid, "memory_id": memory_id, "use": use, "reason": reason})
+        if denied:
+            action.metadata["memory_authorization_denied"] = denied
+            self.audit.append("memory_event", {"event": "memory_authorization_denied", "denials": denied}, task_id=self.contract.task_id if self.contract else None, actor="memory_store", source_ids=action.source_ids, action_id=action.action_id)
+
+    @staticmethod
+    def _authorization_use(semantic_action: str) -> str | None:
+        mapping = {
+            "install_registry_dependency": "authorize_dependency_install",
+            "install_git_dependency": "authorize_dependency_install",
+            "install_tarball_dependency": "authorize_dependency_install",
+            "send_network_request": "authorize_network_egress",
+            "publish_artifact": "authorize_publish",
+            "modify_ci_pipeline": "authorize_ci_modify",
+            "modify_registry_config": "override_policy",
+        }
+        return mapping.get(semantic_action)
 
     def scan_report(self) -> dict[str, Any]:
         report = self.asset_scanner.report(self.asset_graph)

@@ -74,10 +74,16 @@ class PolicyEngine:
             if "secret_access" in exec_trace.risk_observed:
                 reason_codes.append("sandbox_secret_access_observed")
                 score += 20
+        if action.metadata.get("memory_authorization_denied"):
+            reason_codes.append("memory_authorization_denied")
+            controls.append("memory_taint_gate")
+            score += 20
 
         score = min(score, 100)
 
         # Hard deny wins over everything.
+        if action.metadata.get("memory_authorization_denied") and action.semantic_action in {"install_registry_dependency", "install_git_dependency", "install_tarball_dependency", "send_network_request", "publish_artifact", "modify_ci_pipeline", "modify_registry_config"}:
+            return self._decision(action, "block", max(score, 90), reason_codes, ["memory_taint_gate", "block"], "Tainted memory cannot authorize high-risk actions.", intent, package_event, exec_trace)
         if action.semantic_action == "read_secret_file":
             return self._decision(action, "block", 100, [*reason_codes, "hard_deny_read_secret"], ["block"], "Secret reads are hard-denied.", intent, package_event, exec_trace)
         if secret_event and secret_event.event in {"egress_after_secret", "token_like_value_in_tool_args"} and action.semantic_action == "send_network_request":

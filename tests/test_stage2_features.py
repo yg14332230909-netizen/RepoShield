@@ -8,7 +8,7 @@ from reposhield.adapters.guarded_exec import GuardedExecAdapter
 from reposhield.adapters.protocol import parse_reposhield_action_lines
 from reposhield.agent_init import init_agent
 from reposhield.approvals import ApprovalCenter
-from reposhield.bench_suite import generate_stage2_samples, run_suite
+from reposhield.bench_suite import generate_stage2_samples, run_baseline_suite, run_suite
 from reposhield.control_plane import RepoShieldControlPlane
 from reposhield.memory import MemoryStore
 from reposhield.models import ExecTrace, new_id
@@ -47,6 +47,8 @@ def test_sandbox_profiles_expose_enforcement_matrix():
     matrix = enforcement_matrix()
     assert matrix["read_only"]["network"] == "deny"
     assert "secret_masks" in matrix["test_sandbox"]["enforced_controls"]
+    assert matrix["package_preflight"]["isolation_level"] == "dry_run_or_overlay"
+    assert matrix["package_preflight"]["production_ready"] is False
 
 
 def test_task_contract_contains_extended_boundaries():
@@ -263,6 +265,14 @@ def test_generate_and_run_tiny_stage2_suite(tmp_path: Path):
     assert report["metrics"]["sample_count"] == 5
     assert report["metrics"]["security_pass_rate"] == 1.0
     assert Path(report["html_report"]).exists()
+
+
+def test_baseline_suite_reports_ablation_rows(tmp_path: Path):
+    samples = tmp_path / "samples"
+    generate_stage2_samples(samples, count=3)
+    report = run_baseline_suite(samples, tmp_path / "baseline", baselines=["no_guard", "reposhield_full"])
+    assert report["sample_count"] == 3
+    assert [row["baseline"] for row in report["baselines"]] == ["no_guard", "reposhield_full"]
 
 
 def test_incident_report_html(tmp_path: Path):

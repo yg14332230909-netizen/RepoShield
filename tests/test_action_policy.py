@@ -121,3 +121,17 @@ def test_package_guard_detects_pip_extra_index_registry(tmp_path):
     assert event.package == "requests"
     assert event.registry == "evil.example"
     assert "registry_unknown_or_changed" in event.reason_codes
+
+
+def test_package_guard_uses_offline_provenance_oracle(tmp_path):
+    repo = make_repo(tmp_path)
+    (repo / ".reposhield").mkdir()
+    (repo / ".reposhield" / "package_metadata.json").write_text(
+        '{"lodash":{"provenance":"verified","sigstore":true,"integrity":"sha512-demo"},"badpkg":{"deny":true,"reputation":"low"}}',
+        encoding="utf-8",
+    )
+    good = PackageGuard(repo).analyze(ActionParser().parse("npm install lodash", cwd=repo))
+    bad = PackageGuard(repo).analyze(ActionParser().parse("npm install badpkg", cwd=repo))
+    assert good is not None and "package_provenance_verified" in good.reason_codes
+    assert bad is not None and "package_provenance_denied" in bad.reason_codes
+    assert bad.risk == "critical"
