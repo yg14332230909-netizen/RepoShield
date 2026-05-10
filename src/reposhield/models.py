@@ -325,6 +325,7 @@ class MCPInvocation:
 @dataclass(slots=True)
 class AuditEvent:
     event_id: str
+    schema_version: str
     prev_hash: str
     event_hash: str
     timestamp: str

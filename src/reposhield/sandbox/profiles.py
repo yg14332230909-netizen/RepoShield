@@ -38,3 +38,29 @@ def profile_for_action(action: ActionIR) -> SandboxProfile:
     if not action.side_effect:
         return SANDBOX_PROFILES["read_only"]
     return SANDBOX_PROFILES["edit_overlay"]
+
+
+def enforcement_matrix() -> dict[str, dict[str, object]]:
+    return {
+        name: {
+            "filesystem": profile.filesystem,
+            "network": profile.network,
+            "env": profile.env,
+            "dry_run_only": profile.dry_run_only,
+            "allowed_hosts": profile.allowed_hosts,
+            "masks": profile.masks,
+            "enforced_controls": _controls_for(profile),
+        }
+        for name, profile in SANDBOX_PROFILES.items()
+    }
+
+
+def _controls_for(profile: SandboxProfile) -> list[str]:
+    controls = [f"fs:{profile.filesystem}", f"net:{profile.network}", f"env:{profile.env}"]
+    if profile.dry_run_only:
+        controls.append("dry_run_only")
+    if profile.masks:
+        controls.append("secret_masks")
+    if profile.allowed_hosts:
+        controls.append("host_allowlist")
+    return controls

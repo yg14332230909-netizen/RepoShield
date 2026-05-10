@@ -38,6 +38,43 @@ def assistant_message_response(message: dict[str, Any], model: str = "reposhield
     }
 
 
+def responses_api_response(chat_response: dict[str, Any], trace_id: str) -> dict[str, Any]:
+    """Convert an internal chat-completions response into a minimal Responses API shape."""
+    choice = (chat_response.get("choices") or [{}])[0] if isinstance(chat_response.get("choices"), list) else {}
+    message = choice.get("message") or {}
+    output: list[dict[str, Any]] = []
+    content = message.get("content")
+    if content:
+        output.append(
+            {
+                "id": new_id("msg"),
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": str(content)}],
+            }
+        )
+    for call in message.get("tool_calls") or []:
+        function = call.get("function") or {}
+        output.append(
+            {
+                "id": call.get("id") or new_id("call"),
+                "type": "function_call",
+                "name": function.get("name", "unknown_tool"),
+                "arguments": function.get("arguments", "{}"),
+                "call_id": call.get("id") or new_id("call"),
+            }
+        )
+    return {
+        "id": str(chat_response.get("id") or new_id("resp")),
+        "object": "response",
+        "created_at": chat_response.get("created") or utc_now(),
+        "model": chat_response.get("model", "reposhield/local"),
+        "output": output,
+        "metadata": {"reposhield_trace_id": trace_id},
+        "usage": chat_response.get("usage", {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}),
+    }
+
+
 def chat_completion_stream_events(response: dict[str, Any]) -> list[bytes]:
     """Encode a non-stream chat completion as OpenAI-compatible SSE events.
 

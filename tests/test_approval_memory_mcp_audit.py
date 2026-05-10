@@ -10,6 +10,7 @@ from reposhield.mcp_proxy import MCPProxy
 from reposhield.memory import MemoryStore
 from reposhield.models import MCPServerManifest
 from reposhield.policy_runtime import PolicyRuntime
+from reposhield.replay import verify_bundle
 from reposhield.sandbox import SandboxRunner
 
 
@@ -158,6 +159,7 @@ def test_audit_hash_chain_verifies(tmp_path):
     assert ok, errors
     graph = audit.incident_graph()
     assert graph["nodes"]
+    assert all("schema_version" in event for event in audit.read_events())
 
 
 def test_audit_append_is_thread_safe(tmp_path):
@@ -172,3 +174,15 @@ def test_audit_append_is_thread_safe(tmp_path):
     ok, errors = audit.verify()
     assert ok, errors
     assert len(audit.read_events()) == 50
+
+
+def test_replay_detects_missing_policy_evidence(tmp_path):
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    audit = AuditLog(bundle / "audit.jsonl", session_id="sess_test")
+    audit.append("policy_decision", {"decision": "block", "reason_codes": []}, action_id="act_missing", decision_id="dec_1")
+    (bundle / "replay_spec.json").write_text("{}", encoding="utf-8")
+    (bundle / "incident_graph.json").write_text("{}", encoding="utf-8")
+    ok, errors = verify_bundle(bundle)
+    assert not ok
+    assert any("missing action" in error for error in errors)

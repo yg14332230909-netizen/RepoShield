@@ -3,15 +3,90 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 from pathlib import Path
+from typing import Protocol
 
 from .models import ActionIR, PackageEvent, new_id
+
+
+class PackageCommandParser(Protocol):
+    manager: str
+
+    def targets(self, raw: str) -> list[str]:
+        ...
+
+
+class ShlexPackageCommandParser:
+    manager = "generic"
+    commands: set[str] = set()
+    subcommands: set[str] = set()
+    value_flags = {"-r", "--requirement", "--registry", "--index-url", "-i", "--extra-index-url", "--find-links", "-f"}
+    boolean_flags = {"--package-lock-only", "--no-save", "--save-dev", "-D", "--dev", "--upgrade", "-U", "--editable", "-e"}
+
+    def targets(self, raw: str) -> list[str]:
+        try:
+            tokens = shlex.split(raw)
+        except ValueError:
+            tokens = raw.split()
+        targets: list[str] = []
+        skip_next = False
+        for token in tokens:
+            low = token.lower()
+            if skip_next:
+                skip_next = False
+                continue
+            if low in self.commands or low in self.subcommands:
+                continue
+            if low in self.value_flags:
+                skip_next = True
+                continue
+            if low.startswith("--") and "=" in low:
+                flag, _value = low.split("=", 1)
+                if flag in self.value_flags or flag in self.boolean_flags:
+                    continue
+            if low.startswith("-"):
+                continue
+            if token:
+                targets.append(token)
+        return targets
+
+
+class NpmCommandParser(ShlexPackageCommandParser):
+    manager = "npm"
+    commands = {"npm", "pnpm", "yarn", "npx", "pnpm"}
+    subcommands = {"install", "i", "add", "ci", "dlx", "exec"}
+
+
+class PipCommandParser(ShlexPackageCommandParser):
+    manager = "pip"
+    commands = {"pip", "pip3", "python", "python3"}
+    subcommands = {"install", "-m", "pip"}
+
+
+class PoetryCommandParser(ShlexPackageCommandParser):
+    manager = "poetry"
+    commands = {"poetry"}
+    subcommands = {"add", "install"}
+
+
+class CargoCommandParser(ShlexPackageCommandParser):
+    manager = "cargo"
+    commands = {"cargo"}
+    subcommands = {"add", "install"}
+
+
+class GoCommandParser(ShlexPackageCommandParser):
+    manager = "go"
+    commands = {"go"}
+    subcommands = {"get", "install"}
 
 
 class PackageGuard:
     def __init__(self, repo_root: str | Path, allowed_registries: list[str] | None = None):
         self.repo_root = Path(repo_root)
         self.allowed_registries = allowed_registries or ["registry.npmjs.org", "pypi.org", "files.pythonhosted.org", "fake-registry.local"]
+        self.parsers: list[PackageCommandParser] = [NpmCommandParser(), PipCommandParser(), PoetryCommandParser(), CargoCommandParser(), GoCommandParser()]
 
     def analyze(self, action: ActionIR) -> PackageEvent | None:
         if not action.semantic_action.startswith("install_") and action.semantic_action != "publish_artifact" and action.semantic_action != "modify_registry_config":
@@ -43,11 +118,15 @@ class PackageGuard:
                 reason_codes=["modify_registry_config"],
             )
 
-        targets = action.metadata.get("package_args", []) if action.metadata else []
+        manager = self._manager_for_command(action.raw_action)
+        targets = self._targets_for_command(action.raw_action, manager)
+        if not targets:
+            targets = action.metadata.get("package_args", []) if action.metadata else []
         package = targets[0] if targets else self._extract_package(action.raw_action)
         source = self._source_for_package(package or action.raw_action)
         lifecycle_scripts = self._lifecycle_scripts_for(package)
         registry = self._registry_from_command(action.raw_action) or self._registry_from_config() or "official_or_default"
+        lockfile_reasons = self._lockfile_reasons(manager)
         reason_codes: list[str] = []
         risk = "high"
         decision = "approval_required"
@@ -62,6 +141,7 @@ class PackageGuard:
         if registry not in {"official_or_default", *self.allowed_registries}:
             reason_codes.append("registry_unknown_or_changed")
             risk = "critical"
+        reason_codes.extend(lockfile_reasons)
         if not reason_codes:
             reason_codes.append("install_registry_dependency")
 
@@ -77,6 +157,41 @@ class PackageGuard:
             decision=decision,
             reason_codes=reason_codes,
         )
+
+    def _manager_for_command(self, raw: str) -> str:
+        low = raw.lower()
+        if re.search(r"\b(npm|pnpm|yarn|npx)\b", low):
+            return "npm"
+        if re.search(r"\b(pip|pip3|python\s+-m\s+pip)\b", low):
+            return "pip"
+        if re.search(r"\bpoetry\b", low):
+            return "poetry"
+        if re.search(r"\bcargo\b", low):
+            return "cargo"
+        if re.search(r"\bgo\s+(get|install)\b", low):
+            return "go"
+        return "generic"
+
+    def _targets_for_command(self, raw: str, manager: str) -> list[str]:
+        for parser in self.parsers:
+            if parser.manager == manager:
+                return parser.targets(raw)
+        return []
+
+    def _lockfile_reasons(self, manager: str) -> list[str]:
+        lockfiles = {
+            "npm": ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"],
+            "pip": ["requirements.txt", "requirements.lock"],
+            "poetry": ["poetry.lock"],
+            "cargo": ["Cargo.lock"],
+            "go": ["go.sum"],
+        }.get(manager, [])
+        if not lockfiles:
+            return []
+        existing = [name for name in lockfiles if (self.repo_root / name).exists()]
+        if existing:
+            return [f"lockfile_present:{name}" for name in existing]
+        return ["lockfile_missing"]
 
     def _extract_package(self, raw: str) -> str | None:
         m = re.search(r"\b(?:npm|pnpm|yarn|pip|pip3|poetry)\s+(?:install|i|add)\s+([^\s]+)", raw, re.I)
@@ -98,6 +213,8 @@ class PackageGuard:
         m = re.search(r"--registry[=\s]+([^\s]+)", raw, re.I)
         if not m:
             m = re.search(r"--index-url[=\s]+([^\s]+)", raw, re.I)
+        if not m:
+            m = re.search(r"--extra-index-url[=\s]+([^\s]+)", raw, re.I)
         if not m:
             return None
         return re.sub(r"^https?://", "", m.group(1)).split("/")[0]

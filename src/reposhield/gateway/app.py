@@ -15,7 +15,7 @@ from ..instruction_ir import to_dict as instruction_to_dict
 from ..models import new_id, sha256_json
 from ..plugins import ToolParserRegistry
 from ..policy_runtime import PolicyRuntime
-from .openai_compat import chat_completion_stream_events, extract_messages, latest_user_text
+from .openai_compat import chat_completion_stream_events, extract_messages, latest_user_text, responses_api_response
 from .response_transform import transform_response
 from .trace_state import GatewayTrace
 from .upstream import LocalHeuristicUpstream, OpenAICompatibleUpstream
@@ -200,6 +200,8 @@ def serve_gateway(
                 request = json.loads(body.decode("utf-8") or "{}")
                 result = gateway.handle_chat_completion(request)
                 payload = result["response"]
+                if self.path == "/v1/responses":
+                    payload = responses_api_response(payload, str(result["trace_id"]))
                 payload["reposhield"] = {"trace_id": result["trace_id"], "audit_log": result["audit_log"], "guarded_results": result["guarded_results"]}
                 if request.get("stream"):
                     self.send_response(200)

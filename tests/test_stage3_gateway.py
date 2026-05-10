@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 
 from reposhield.audit import AuditLog
 from reposhield.gateway import OpenAICompatibleUpstream, RepoShieldGateway, serve_gateway, simulate_gateway_request
-from reposhield.gateway.openai_compat import chat_completion_stream_events
+from reposhield.gateway.openai_compat import chat_completion_stream_events, responses_api_response
 from reposhield.gateway_bench import generate_stage3_gateway_samples, run_gateway_suite
 from reposhield.instruction_ir import InstructionBuilder, InstructionLowerer
 from reposhield.plugins import ToolParserRegistry
@@ -186,6 +186,19 @@ def test_chat_completion_stream_events_emit_indexed_tool_call_chunks():
     )
     joined = b"".join(events).decode("utf-8")
     assert '"index": 0' in joined
+
+
+def test_responses_api_response_has_response_shape(tmp_path: Path):
+    repo = make_repo(tmp_path)
+    result = simulate_gateway_request(
+        repo,
+        {"model": "reposhield/local-heuristic", "messages": [{"role": "user", "content": "fix login"}]},
+        audit_path=tmp_path / "audit.jsonl",
+    )
+    response = responses_api_response(result["response"], result["trace_id"])
+    assert response["object"] == "response"
+    assert response["output"]
+    assert response["metadata"]["reposhield_trace_id"] == result["trace_id"]
 
 
 def test_gateway_resets_contract_and_context_graph_per_request(tmp_path: Path):

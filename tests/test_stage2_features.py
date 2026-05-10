@@ -14,7 +14,7 @@ from reposhield.memory import MemoryStore
 from reposhield.models import ExecTrace, new_id
 from reposhield.reference_agent import ReferenceCodingAgent
 from reposhield.report import render_incident_html
-from reposhield.sandbox import SANDBOX_PROFILES
+from reposhield.sandbox import SANDBOX_PROFILES, enforcement_matrix
 
 
 def make_repo(tmp_path: Path) -> Path:
@@ -41,6 +41,12 @@ def test_sandbox_profiles_and_ci_preflight(tmp_path: Path):
     assert "ci_dry_run" in SANDBOX_PROFILES
     events = cp.audit.read_events()
     assert any(e["event_type"] == "exec_trace" and e["payload"]["sandbox_profile"] == "ci_dry_run" for e in events)
+
+
+def test_sandbox_profiles_expose_enforcement_matrix():
+    matrix = enforcement_matrix()
+    assert matrix["read_only"]["network"] == "deny"
+    assert "secret_masks" in matrix["test_sandbox"]["enforced_controls"]
 
 
 def test_aider_adapter_blocks_injected_dependency_but_allows_utility(tmp_path: Path):

@@ -5,10 +5,29 @@ import json
 import shutil
 import threading
 from dataclasses import asdict
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from .models import AuditEvent, new_id, sha256_json, stable_json, utc_now
+
+
+class AuditEventType(StrEnum):
+    ASSET_SCAN = "asset_scan"
+    SOURCE_INGESTED = "source_ingested"
+    TASK_CONTRACT = "task_contract"
+    ACTION_PARSED = "action_parsed"
+    SECRET_EVENT = "secret_event"
+    PACKAGE_EVENT = "package_event"
+    MCP_INVOCATION = "mcp_invocation"
+    MEMORY_EVENT = "memory_event"
+    EXEC_TRACE = "exec_trace"
+    POLICY_DECISION = "policy_decision"
+    POLICY_RUNTIME = "policy_runtime"
+    POLICY_OVERRIDE_EVENT = "policy_override_event"
+    HOST_EXEC_STARTED = "host_exec_started"
+    HOST_EXEC_COMPLETED = "host_exec_completed"
+    GATEWAY_RESPONSE = "gateway_response"
 
 
 class AuditLog:
@@ -37,6 +56,7 @@ class AuditLog:
             redacted_payload = self._redact_payload(payload)
             event_without_hash = {
                 "event_id": new_id("evt"),
+                "schema_version": "audit-event-v1",
                 "prev_hash": self._head,
                 "timestamp": utc_now(),
                 "session_id": self.session_id,
@@ -49,6 +69,7 @@ class AuditLog:
                 "decision_id": decision_id,
                 "redaction": {"secret_values": "redacted", "stored_secret_hashes": True},
             }
+            self._validate_event(event_without_hash)
             event_hash = sha256_json(event_without_hash)
             event = AuditEvent(event_hash=event_hash, **event_without_hash)
             with self.log_path.open("a", encoding="utf-8") as f:
@@ -166,6 +187,15 @@ class AuditLog:
             return value
 
         return walk(payload)
+
+    @staticmethod
+    def _validate_event(event: dict[str, Any]) -> None:
+        required = {"event_id", "schema_version", "prev_hash", "timestamp", "session_id", "actor", "event_type", "payload"}
+        missing = sorted(required - set(event))
+        if missing:
+            raise ValueError(f"audit event missing required fields: {', '.join(missing)}")
+        if not isinstance(event.get("payload"), dict):
+            raise TypeError("audit event payload must be a dict")
 
     @staticmethod
     def _label_for(event: dict[str, Any]) -> str:
