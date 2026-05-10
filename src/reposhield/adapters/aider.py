@@ -22,8 +22,26 @@ class AiderAdapter(GenericCLIAdapter):
     def available() -> bool:
         return shutil.which("aider") is not None
 
-    def __init__(self, repo_root: str | Path, control_plane: RepoShieldControlPlane, task: str, transcript: str | Path | None = None, command: list[str] | None = None):
-        super().__init__(repo_root, control_plane, task, transcript=transcript, command=command)
+    def __init__(
+        self,
+        repo_root: str | Path,
+        control_plane: RepoShieldControlPlane,
+        task: str,
+        transcript: str | Path | None = None,
+        command: list[str] | None = None,
+        *,
+        allow_command_collection: bool = False,
+        command_collection_mode: str = "refuse",
+    ):
+        super().__init__(
+            repo_root,
+            control_plane,
+            task,
+            transcript=transcript,
+            command=command,
+            allow_command_collection=allow_command_collection,
+            command_collection_mode=command_collection_mode,
+        )
 
     def collect_plan(self):
         if self.transcript or self.command:

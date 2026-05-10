@@ -6,6 +6,7 @@ allowed by RepoShield are applied; dangerous actions are never passed through.
 from __future__ import annotations
 
 import subprocess
+import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
@@ -26,6 +27,7 @@ class GenericCLIAdapter:
         command: list[str] | None = None,
         *,
         allow_command_collection: bool = False,
+        command_collection_mode: str = "refuse",
     ):
         self.repo_root = Path(repo_root).resolve()
         self.cp = control_plane
@@ -33,24 +35,31 @@ class GenericCLIAdapter:
         self.transcript = Path(transcript) if transcript else None
         self.command = command
         self.allow_command_collection = allow_command_collection
+        self.command_collection_mode = command_collection_mode
 
     def collect_plan(self) -> list[AgentToolCall]:
         text = ""
         if self.transcript:
             text = self.transcript.read_text(encoding="utf-8")
         elif self.command:
-            if not self.allow_command_collection:
+            if not self.allow_command_collection or self.command_collection_mode != "sandboxed_plan":
                 raise RuntimeError(
                     "Refusing to execute external agent command before RepoShield governance. "
-                    "Use transcript mode, gateway mode, exec-guard/file-guard, or a PATH shim."
+                    "Use transcript mode, gateway mode, exec-guard/file-guard, a PATH shim, "
+                    "or explicit sandboxed_plan command collection."
                 )
             self.cp.audit.append(
                 "unsafe_adapter_command_collection",
-                {"adapter": self.name, "command": self.command, "warning": "external command collection was explicitly allowed"},
+                {"adapter": self.name, "command": self.command, "mode": self.command_collection_mode, "warning": "external command collection was constrained to a temporary sandbox copy"},
                 task_id=self.cp.contract.task_id if self.cp.contract else None,
                 actor="generic_cli_adapter",
             )
-            proc = subprocess.run(self.command, cwd=self.repo_root, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+            with tempfile.TemporaryDirectory(prefix="reposhield-plan-") as tmp:
+                sandbox_repo = Path(tmp) / "repo"
+                import shutil
+
+                shutil.copytree(self.repo_root, sandbox_repo, ignore=shutil.ignore_patterns(".git", "node_modules", ".venv", ".env", ".npmrc", ".pypirc"))
+                proc = subprocess.run(self.command, cwd=sandbox_repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
             text = proc.stdout + "\n" + proc.stderr
         else:
             text = "EDIT: src/login.js\nRS_ACTION: npm test\n"

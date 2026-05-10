@@ -58,7 +58,7 @@ class ConfigurablePolicyOverrides:
                     decision,
                     reason_codes=list(dict.fromkeys([*decision.reason_codes, "invalid_policy_override_decision"])),
                 )
-            if self._is_unsafe_downgrade(decision.decision, new_decision) and not bool(rule.get("unsafe_override")):
+            if self._is_unsafe_downgrade(decision.decision, new_decision) and not self._has_trusted_unsafe_override(rule):
                 self._events.append({"event": "unsafe_policy_downgrade_rejected", "rule": rule.get("name"), "from": decision.decision, "to": new_decision})
                 return replace(
                     decision,
@@ -88,6 +88,10 @@ class ConfigurablePolicyOverrides:
         if current == "allow_in_sandbox" and requested == "allow":
             return True
         return False
+
+    @staticmethod
+    def _has_trusted_unsafe_override(rule: dict[str, Any]) -> bool:
+        return bool(rule.get("unsafe_override") and (rule.get("trusted_admin_policy") or rule.get("admin_signed")))
 
     @staticmethod
     def _matches(match: dict[str, Any], action: ActionIR, decision: PolicyDecision) -> bool:

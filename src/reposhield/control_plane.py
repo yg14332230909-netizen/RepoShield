@@ -21,9 +21,16 @@ from .sentry import SecretSentry
 class RepoShieldControlPlane:
     """Single façade used by CLIs, adapters and the reference coding agent."""
 
-    def __init__(self, repo_root: str | Path, audit_path: str | Path | None = None, env: dict[str, str] | None = None, policy_config: str | Path | None = None):
+    def __init__(
+        self,
+        repo_root: str | Path,
+        audit_path: str | Path | None = None,
+        env: dict[str, str] | None = None,
+        policy_config: str | Path | None = None,
+        audit: AuditLog | None = None,
+    ):
         self.repo_root = Path(repo_root).resolve()
-        self.audit = AuditLog(audit_path or (self.repo_root / ".reposhield" / "audit.jsonl"))
+        self.audit = audit or AuditLog(audit_path or (self.repo_root / ".reposhield" / "audit.jsonl"))
         self.provenance = ContextProvenance()
         self.parser = ActionParser()
         self.asset_scanner = AssetScanner(self.repo_root, env=env)

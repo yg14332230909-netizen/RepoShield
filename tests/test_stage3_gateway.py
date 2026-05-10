@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import json
+import socket
+import threading
+import time
 from pathlib import Path
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
-from reposhield.gateway import OpenAICompatibleUpstream, RepoShieldGateway, simulate_gateway_request
+from reposhield.audit import AuditLog
+from reposhield.gateway import OpenAICompatibleUpstream, RepoShieldGateway, serve_gateway, simulate_gateway_request
 from reposhield.gateway.openai_compat import chat_completion_stream_events
 from reposhield.gateway_bench import generate_stage3_gateway_samples, run_gateway_suite
 from reposhield.instruction_ir import InstructionBuilder, InstructionLowerer
@@ -174,6 +180,24 @@ def test_gateway_resets_contract_and_context_graph_per_request(tmp_path: Path):
     assert all(src.source_id != "src_issue_001" for src in gw.cp.provenance.graph.nodes)
 
 
+def test_gateway_concurrent_requests_keep_audit_hash_chain_valid(tmp_path: Path):
+    repo = make_repo(tmp_path)
+    audit_path = tmp_path / "audit.jsonl"
+    gw = RepoShieldGateway(repo, audit_path=audit_path)
+
+    def call(i: int):
+        return gw.handle_chat_completion({"trace_id": f"trace_{i}", "messages": [{"role": "user", "content": "fix login and run tests"}]})
+
+    threads = [threading.Thread(target=call, args=(i,)) for i in range(20)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    ok, errors = AuditLog(audit_path).verify()
+    assert ok, errors
+
+
 def test_gateway_does_not_release_allow_in_sandbox_tool_calls(tmp_path: Path):
     repo = make_repo(tmp_path)
     result = simulate_gateway_request(
@@ -185,6 +209,34 @@ def test_gateway_does_not_release_allow_in_sandbox_tool_calls(tmp_path: Path):
     message = result["response"]["choices"][0]["message"]
     assert message.get("tool_calls") == []
     assert "sandbox-only" in message["content"]
+
+
+def test_serve_gateway_rejects_missing_authorization(tmp_path: Path):
+    repo = make_repo(tmp_path)
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    thread = threading.Thread(
+        target=serve_gateway,
+        kwargs={"repo_root": repo, "host": "127.0.0.1", "port": port, "audit_path": tmp_path / "audit.jsonl"},
+        daemon=True,
+    )
+    thread.start()
+    time.sleep(0.25)
+    req = Request(
+        f"http://127.0.0.1:{port}/v1/chat/completions",
+        data=json.dumps({"messages": [{"role": "user", "content": "fix login"}]}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        urlopen(req, timeout=5)
+    except HTTPError as exc:
+        assert exc.code == 401
+    else:
+        raise AssertionError("gateway should reject requests without Authorization")
+    events = AuditLog(tmp_path / "audit.jsonl").read_events()
+    assert any(e["event_type"] == "rejected_gateway_request" for e in events)
 
 
 def test_gateway_plus_guarded_tools_can_release_allow_in_sandbox_tool_calls(tmp_path: Path):

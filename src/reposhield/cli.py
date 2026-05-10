@@ -124,9 +124,25 @@ def cmd_run_agent(args: argparse.Namespace) -> int:
     cp.build_contract(args.task)
     command = args.agent_command if args.agent_command else None
     if args.adapter == "aider":
-        adapter = AiderAdapter(args.repo, cp, args.task, transcript=args.transcript, command=command)
+        adapter = AiderAdapter(
+            args.repo,
+            cp,
+            args.task,
+            transcript=args.transcript,
+            command=command,
+            allow_command_collection=args.allow_command_collection,
+            command_collection_mode=args.command_collection_mode,
+        )
     else:
-        adapter = GenericCLIAdapter(args.repo, cp, args.task, transcript=args.transcript, command=command)
+        adapter = GenericCLIAdapter(
+            args.repo,
+            cp,
+            args.task,
+            transcript=args.transcript,
+            command=command,
+            allow_command_collection=args.allow_command_collection,
+            command_collection_mode=args.command_collection_mode,
+        )
     result = adapter.run()
     _print_json(asdict(result))
     return 0
@@ -338,6 +354,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_agent.add_argument("--task", required=True)
     run_agent.add_argument("--transcript")
     run_agent.add_argument("--agent-command", nargs="+")
+    run_agent.add_argument("--allow-command-collection", action="store_true", help="Explicitly allow sandboxed plan-only command collection.")
+    run_agent.add_argument("--command-collection-mode", choices=["refuse", "sandboxed_plan"], default="refuse")
     run_agent.add_argument("--audit")
     run_agent.set_defaults(func=cmd_run_agent)
 

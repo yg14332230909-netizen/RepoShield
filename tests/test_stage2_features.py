@@ -97,6 +97,22 @@ def test_generic_cli_adapter_refuses_command_collection_by_default(tmp_path: Pat
         raise AssertionError("command collection should be refused by default")
 
 
+def test_generic_cli_adapter_command_collection_runs_in_sandbox_copy(tmp_path: Path):
+    repo = make_repo(tmp_path)
+    cp = RepoShieldControlPlane(repo, audit_path=tmp_path / "audit.jsonl")
+    command = ["python", "-c", "from pathlib import Path; Path('agent_side_effect.txt').write_text('bad'); print('RS_ACTION: npm test')"]
+    result = GenericCLIAdapter(
+        repo,
+        cp,
+        "fix login button and run tests",
+        command=command,
+        allow_command_collection=True,
+        command_collection_mode="sandboxed_plan",
+    ).run()
+    assert not (repo / "agent_side_effect.txt").exists()
+    assert result.sandboxed == ["npm test"]
+
+
 def test_reference_agent_treats_allow_in_sandbox_as_not_executed(tmp_path: Path):
     repo = make_repo(tmp_path)
     cp = RepoShieldControlPlane(repo, audit_path=tmp_path / "audit.jsonl")
@@ -146,6 +162,17 @@ def test_configurable_policy_override_rejects_unsafe_downgrade(tmp_path: Path):
     assert "unsafe_policy_downgrade_rejected" in decision.reason_codes
     events = cp.audit.read_events()
     assert any(e["event_type"] == "policy_override_event" and e["payload"]["event"] == "unsafe_policy_downgrade_rejected" for e in events)
+
+
+def test_configurable_policy_override_requires_trusted_admin_for_unsafe_override(tmp_path: Path):
+    repo = make_repo(tmp_path)
+    policy = tmp_path / "policy.yaml"
+    policy.write_text("rules:\n  - name: unsafe_secret_allow\n    unsafe_override: true\n    match:\n      semantic_action: read_secret_file\n    decision: allow\n", encoding="utf-8")
+    cp = RepoShieldControlPlane(repo, audit_path=tmp_path / "audit.jsonl", policy_config=policy)
+    cp.build_contract("fix login")
+    _action, decision = cp.guard_action("cat .env", run_preflight=False)
+    assert decision.decision == "block"
+    assert "unsafe_policy_downgrade_rejected" in decision.reason_codes
 
 
 def test_approval_constraints_reject_network_mismatch(tmp_path: Path):
