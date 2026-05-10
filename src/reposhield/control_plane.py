@@ -37,6 +37,11 @@ class RepoShieldControlPlane:
         self.contract: TaskContract | None = None
         self.audit.append("asset_scan", asdict(self.asset_graph), actor="asset_scanner")
 
+    def reset_task_context(self) -> None:
+        """Start a fresh per-request task context while keeping shared repo services."""
+        self.provenance = ContextProvenance()
+        self.contract = None
+
     def ingest_source(self, source_type: str, content: str, retrieval_path: str = "", source_id: str | None = None) -> SourceRecord:
         src = self.provenance.ingest(source_type, content, retrieval_path, source_id=source_id)
         self.audit.append("source_ingested", asdict(src), actor="context_provenance", source_ids=[src.source_id])

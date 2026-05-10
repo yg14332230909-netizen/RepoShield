@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from reposhield.adapters.generic_cli import GenericCLIAdapter
 from reposhield.adapters.aider import AiderAdapter
 from reposhield.adapters.guarded_exec import GuardedExecAdapter
 from reposhield.agent_init import init_agent
@@ -10,6 +11,7 @@ from reposhield.bench_suite import generate_stage2_samples, run_suite
 from reposhield.control_plane import RepoShieldControlPlane
 from reposhield.memory import MemoryStore
 from reposhield.models import ExecTrace, new_id
+from reposhield.reference_agent import ReferenceCodingAgent
 from reposhield.report import render_incident_html
 from reposhield.sandbox import SANDBOX_PROFILES
 
@@ -70,6 +72,24 @@ def test_guarded_exec_adapter_sandboxes_test_command(tmp_path: Path):
     assert result.executed is False
     assert result.sandboxed is True
     assert result.decision["decision"] == "allow_in_sandbox"
+
+
+def test_generic_cli_adapter_sandboxes_without_host_apply(tmp_path: Path):
+    repo = make_repo(tmp_path)
+    transcript = tmp_path / "transcript.txt"
+    transcript.write_text("RS_ACTION: npm test\n", encoding="utf-8")
+    cp = RepoShieldControlPlane(repo, audit_path=tmp_path / "audit.jsonl")
+    result = GenericCLIAdapter(repo, cp, "fix login button and run tests", transcript=transcript).run()
+    assert result.executed == []
+    assert result.sandboxed == ["npm test"]
+
+
+def test_reference_agent_treats_allow_in_sandbox_as_not_executed(tmp_path: Path):
+    repo = make_repo(tmp_path)
+    cp = RepoShieldControlPlane(repo, audit_path=tmp_path / "audit.jsonl")
+    result = ReferenceCodingAgent(repo, cp).run("fix login button and run tests")
+    assert "npm test" not in result["executed"]
+    assert "npm test" in result["sandboxed"]
 
 
 def test_init_agent_generates_config_and_shims(tmp_path: Path):

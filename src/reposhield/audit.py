@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import threading
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ class AuditLog:
         self.log_path = Path(log_path)
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.session_id = session_id or new_id("sess")
+        self._lock = threading.RLock()
         self._head = self._read_head()
 
     @property
@@ -31,27 +33,28 @@ class AuditLog:
         action_id: str | None = None,
         decision_id: str | None = None,
     ) -> AuditEvent:
-        redacted_payload = self._redact_payload(payload)
-        event_without_hash = {
-            "event_id": new_id("evt"),
-            "prev_hash": self._head,
-            "timestamp": utc_now(),
-            "session_id": self.session_id,
-            "task_id": task_id,
-            "actor": actor,
-            "event_type": event_type,
-            "payload": redacted_payload,
-            "source_ids": source_ids or [],
-            "action_id": action_id,
-            "decision_id": decision_id,
-            "redaction": {"secret_values": "redacted", "stored_secret_hashes": True},
-        }
-        event_hash = sha256_json(event_without_hash)
-        event = AuditEvent(event_hash=event_hash, **event_without_hash)
-        with self.log_path.open("a", encoding="utf-8") as f:
-            f.write(stable_json(asdict(event)) + "\n")
-        self._head = event_hash
-        return event
+        with self._lock:
+            redacted_payload = self._redact_payload(payload)
+            event_without_hash = {
+                "event_id": new_id("evt"),
+                "prev_hash": self._head,
+                "timestamp": utc_now(),
+                "session_id": self.session_id,
+                "task_id": task_id,
+                "actor": actor,
+                "event_type": event_type,
+                "payload": redacted_payload,
+                "source_ids": source_ids or [],
+                "action_id": action_id,
+                "decision_id": decision_id,
+                "redaction": {"secret_values": "redacted", "stored_secret_hashes": True},
+            }
+            event_hash = sha256_json(event_without_hash)
+            event = AuditEvent(event_hash=event_hash, **event_without_hash)
+            with self.log_path.open("a", encoding="utf-8") as f:
+                f.write(stable_json(asdict(event)) + "\n")
+            self._head = event_hash
+            return event
 
     def verify(self) -> tuple[bool, list[str]]:
         errors: list[str] = []
@@ -71,13 +74,14 @@ class AuditLog:
     def read_events(self) -> list[dict[str, Any]]:
         if not self.log_path.exists():
             return []
-        events = []
-        with self.log_path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    events.append(json.loads(line))
-        return events
+        with self._lock:
+            events = []
+            with self.log_path.open("r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        events.append(json.loads(line))
+            return events
 
     def incident_graph(self) -> dict[str, Any]:
         nodes: list[dict[str, Any]] = []

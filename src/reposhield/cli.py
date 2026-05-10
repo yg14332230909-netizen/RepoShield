@@ -47,7 +47,13 @@ def cmd_guard(args: argparse.Namespace) -> int:
         source_ids.append(src.source_id)
     action, decision = cp.guard_action(args.action, source_ids=source_ids, tool=args.tool)
     _print_json({"action": asdict(action), "decision": asdict(decision), "audit_log": str(cp.audit.log_path)})
-    return 2 if decision.decision == "block" else 0
+    if decision.decision == "allow":
+        return 0
+    if decision.decision == "allow_in_sandbox":
+        return 3
+    if decision.decision == "sandbox_then_approval":
+        return 3
+    return 2
 
 
 def cmd_parse(args: argparse.Namespace) -> int:
@@ -145,7 +151,7 @@ def cmd_exec_guard(args: argparse.Namespace) -> int:
     if decision == "allow":
         return int(result.exit_code or 0)
     if decision == "allow_in_sandbox":
-        return int(result.exit_code or 0)
+        return 3
     if decision == "sandbox_then_approval":
         return 3
     return 2
@@ -161,7 +167,11 @@ def cmd_file_guard(args: argparse.Namespace) -> int:
         source_ids.append(src.source_id)
     action, decision = cp.guard_action(args.path, source_ids=source_ids, tool=args.operation.title(), operation=args.operation, file_path=args.path)
     _print_json({"action": asdict(action), "decision": asdict(decision), "audit_log": str(cp.audit.log_path)})
-    return 0 if decision.decision in {"allow", "allow_in_sandbox"} else 2
+    if decision.decision == "allow":
+        return 0
+    if decision.decision in {"allow_in_sandbox", "sandbox_then_approval"}:
+        return 3
+    return 2
 
 
 def cmd_init_agent(args: argparse.Namespace) -> int:
@@ -266,6 +276,7 @@ def cmd_gateway_start(args: argparse.Namespace) -> int:
         upstream_chat_path=args.upstream_chat_path,
         upstream_timeout=args.upstream_timeout,
         policy_config=args.policy_config,
+        gateway_api_key=args.gateway_api_key,
     )
     return 0
 
@@ -404,6 +415,7 @@ def build_parser() -> argparse.ArgumentParser:
     gw_start.add_argument("--upstream-chat-path", default="/chat/completions", help="Path under upstream base URL for chat completions.")
     gw_start.add_argument("--upstream-timeout", type=float, default=60.0)
     gw_start.add_argument("--policy-config")
+    gw_start.add_argument("--gateway-api-key", help="Require clients to send Authorization: Bearer <key>. Defaults to REPOSHIELD_GATEWAY_API_KEY when set.")
     gw_start.set_defaults(func=cmd_gateway_start)
 
     bench = sub.add_parser("bench", help="运行 CodeAgent-SecBench 单个样本")

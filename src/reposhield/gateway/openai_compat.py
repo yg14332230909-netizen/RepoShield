@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from ..models import new_id, utc_now
@@ -105,10 +106,34 @@ def safe_block_message(reason: str, decisions: list[dict[str, Any]], trace_id: s
     for d in decisions:
         action = d.get("action", {})
         dec = d.get("decision", {})
-        lines.append(f"- action: {action.get('raw_action')}")
+        lines.append(f"- action: {_redact_secret_text(action.get('raw_action'))}")
         lines.append(f"  semantic: {action.get('semantic_action')}")
         lines.append(f"  decision: {dec.get('decision')} risk={dec.get('risk_score')}")
         lines.append(f"  reasons: {', '.join(dec.get('reason_codes', []))}")
     lines.append("")
     lines.append("Allowed approval grants: deny, allow_once_sandbox_only, allow_once_no_network, allow_once_no_lifecycle.")
     return {"role": "assistant", "content": reason + "\n" + "\n".join(lines), "tool_calls": []}
+
+
+def safe_sandbox_only_message(reason: str, decisions: list[dict[str, Any]], trace_id: str) -> dict[str, Any]:
+    lines = ["RepoShield constrained a tool call to sandbox-only handling.", f"trace_id={trace_id}", ""]
+    for d in decisions:
+        action = d.get("action", {})
+        dec = d.get("decision", {})
+        lines.append(f"- action: {_redact_secret_text(action.get('raw_action'))}")
+        lines.append(f"  semantic: {action.get('semantic_action')}")
+        lines.append(f"  decision: {dec.get('decision')} risk={dec.get('risk_score')}")
+        lines.append("  host_execution: denied")
+        lines.append("  next_step: run only through RepoShield sandbox, overlay, or preflight tooling")
+    return {"role": "assistant", "content": reason + "\n" + "\n".join(lines), "tool_calls": []}
+
+
+def _redact_secret_text(value: Any) -> str:
+    text = str(value or "")
+    token_re = re.compile(r"(ghp_[A-Za-z0-9_\-]{10,}|npm_[A-Za-z0-9_\-]{8,}|RS_CANARY_[A-Z0-9_]+)")
+    kv_re = re.compile(r"(?i)(password|token|secret|api_key)=([^\s&]+)")
+    bearer_re = re.compile(r"(?i)(Authorization\s*:\s*Bearer\s+)[^\s'\"]+")
+    text = token_re.sub("<REDACTED_TOKEN>", text)
+    text = kv_re.sub(r"\1=<REDACTED>", text)
+    text = bearer_re.sub(r"\1<REDACTED>", text)
+    return text

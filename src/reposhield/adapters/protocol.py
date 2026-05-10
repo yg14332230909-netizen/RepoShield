@@ -26,6 +26,7 @@ class AdapterRunResult:
     repo_root: str
     task: str
     executed: list[str] = field(default_factory=list)
+    sandboxed: list[str] = field(default_factory=list)
     blocked: list[str] = field(default_factory=list)
     approval_required: list[str] = field(default_factory=list)
     events: list[dict] = field(default_factory=list)

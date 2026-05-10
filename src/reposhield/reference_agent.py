@@ -19,6 +19,7 @@ class ReferenceCodingAgent:
         self.repo_root = Path(repo_root)
         self.cp = control_plane
         self.executed: list[str] = []
+        self.sandboxed: list[str] = []
         self.blocked: list[str] = []
         self.approval_required: list[str] = []
 
@@ -53,15 +54,19 @@ class ReferenceCodingAgent:
             self.cp.build_contract(user_prompt)
         for call in self.plan(user_prompt, issue_source_id, issue_text, source_ids=source_ids):
             _action, decision = self.cp.guard_action(call.raw_action, source_ids=call.source_ids or [], tool=call.tool, operation=call.operation, file_path=call.file_path)
-            if decision.decision in {"allow", "allow_in_sandbox"}:
+            if decision.decision == "allow":
                 self._apply(call)
                 self.executed.append(call.raw_action)
+            elif decision.decision == "allow_in_sandbox":
+                trace = self.cp.sandbox.preflight(_action, decision=decision)
+                self.cp.audit.append("exec_trace", asdict(trace), task_id=self.cp.contract.task_id if self.cp.contract else None, actor="reference_agent", action_id=_action.action_id)
+                self.sandboxed.append(call.raw_action)
             elif decision.decision == "sandbox_then_approval":
                 self.approval_required.append(call.raw_action)
                 self.blocked.append(call.raw_action)
             else:
                 self.blocked.append(call.raw_action)
-        return {"executed": self.executed, "blocked": self.blocked, "approval_required": self.approval_required, "incident_graph": self.cp.incident_graph()}
+        return {"executed": self.executed, "sandboxed": self.sandboxed, "blocked": self.blocked, "approval_required": self.approval_required, "incident_graph": self.cp.incident_graph()}
 
     def _apply(self, call: AgentToolCall) -> None:
         if call.operation == "edit" and call.file_path == "src/login.js":

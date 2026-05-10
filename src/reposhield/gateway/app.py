@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -45,10 +46,10 @@ class RepoShieldGateway:
         turn_id = trace.new_turn("chat_completion", {"model": request.get("model"), "message_count": len(messages)})
         self.cp.audit.append("gateway_pre_call", {"trace_id": trace.trace_id, "turn_id": turn_id, "model": request.get("model"), "message_count": len(messages), "request_hash": sha256_json(request)}, actor="gateway")
 
+        self.cp.reset_task_context()
+        self.cp.build_contract(str(request.get("task") or latest_user_text(messages) or "general code maintenance task"))
         contexts = self._ingest_contexts(request)
         source_ids = [c["source_id"] for c in contexts]
-        if not self.cp.contract:
-            self.cp.build_contract(str(request.get("task") or latest_user_text(messages) or "general code maintenance task"))
 
         upstream_contexts = [{"source_id": sid, "content": c.get("content", "")} for sid, c in zip(source_ids, contexts)]
         if request.get("stream") and hasattr(self.upstream, "complete_streaming"):
@@ -132,6 +133,7 @@ def serve_gateway(
     upstream_chat_path: str = "/chat/completions",
     upstream_timeout: float = 60.0,
     policy_config: str | Path | None = None,
+    gateway_api_key: str | None = None,
 ) -> None:
     """Start a tiny standard-library OpenAI-compatible HTTP server.
 
@@ -153,6 +155,7 @@ def serve_gateway(
             upstream_timeout=upstream_timeout,
         ),
     )
+    required_gateway_key = gateway_api_key if gateway_api_key is not None else os.getenv("REPOSHIELD_GATEWAY_API_KEY")
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802 - http.server API
@@ -160,6 +163,12 @@ def serve_gateway(
                 self.send_response(404)
                 self.end_headers()
                 self.wfile.write(b"not found")
+                return
+            if required_gateway_key and self.headers.get("Authorization") != f"Bearer {required_gateway_key}":
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b'{"error":"missing or invalid Authorization bearer token"}')
                 return
             try:
                 body = self.rfile.read(int(self.headers.get("Content-Length", "0") or "0"))

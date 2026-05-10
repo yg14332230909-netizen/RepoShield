@@ -11,8 +11,10 @@ cp = RepoShieldControlPlane(repo)
 cp.build_contract(user_task)
 action, decision = cp.guard_action(raw_action, source_ids=[...], tool='Bash')
 
-if decision.decision in {'allow', 'allow_in_sandbox'}:
+if decision.decision == 'allow':
     execute_or_apply_action()
+elif decision.decision == 'allow_in_sandbox':
+    run_only_in_sandbox_overlay_or_preflight()
 elif decision.decision == 'sandbox_then_approval':
     request_human_approval()
 else:

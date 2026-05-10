@@ -44,9 +44,13 @@ class GenericCLIAdapter:
         for call in self.collect_plan():
             _action, decision = self.cp.guard_action(call.raw_action, source_ids=call.source_ids or [], tool=call.tool, operation=call.operation, file_path=call.file_path)
             result.events.append({"raw_action": call.raw_action, "decision": asdict(decision)})
-            if decision.decision in {"allow", "allow_in_sandbox"}:
+            if decision.decision == "allow":
                 self.apply_allowed_action(call)
                 result.executed.append(call.raw_action)
+            elif decision.decision == "allow_in_sandbox":
+                trace = self.cp.sandbox.preflight(_action, decision=decision)
+                self.cp.audit.append("exec_trace", asdict(trace), task_id=self.cp.contract.task_id if self.cp.contract else None, actor="generic_cli_adapter", action_id=_action.action_id)
+                result.sandboxed.append(call.raw_action)
             elif decision.decision == "sandbox_then_approval":
                 result.approval_required.append(call.raw_action)
             else:

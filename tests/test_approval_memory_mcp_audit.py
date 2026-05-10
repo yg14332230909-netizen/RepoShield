@@ -1,4 +1,6 @@
 
+from concurrent.futures import ThreadPoolExecutor
+
 from reposhield.action_parser import ActionParser
 from reposhield.approvals import ApprovalCenter, ApprovalStore
 from reposhield.audit import AuditLog
@@ -77,3 +79,17 @@ def test_audit_hash_chain_verifies(tmp_path):
     assert ok, errors
     graph = audit.incident_graph()
     assert graph["nodes"]
+
+
+def test_audit_append_is_thread_safe(tmp_path):
+    audit = AuditLog(tmp_path / "audit.jsonl", session_id="sess_test")
+
+    def write_event(i):
+        audit.append("concurrent_event", {"i": i})
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(write_event, range(50)))
+
+    ok, errors = audit.verify()
+    assert ok, errors
+    assert len(audit.read_events()) == 50
