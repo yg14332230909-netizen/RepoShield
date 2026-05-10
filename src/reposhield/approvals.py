@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
+import json
+from pathlib import Path
 from typing import Any
 
 from .models import ActionIR, ApprovalGrant, ApprovalRequest, ContextGraph, ExecTrace, PolicyDecision, TaskContract, new_id, sha256_json
@@ -105,3 +107,63 @@ class ApprovalCenter:
             "grant_rate": round(self.grants_issued / total, 3),
             "denial_rate": round(self.denials / total, 3),
         }
+
+
+class ApprovalStore:
+    """Tiny JSONL persistence layer for approval requests and grants.
+
+    The store keeps approval memory outside process RAM while preserving the
+    hash-bound request/grant objects used by ApprovalCenter.
+    """
+
+    def __init__(self, path: str | Path):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    def append_request(self, request: ApprovalRequest) -> None:
+        self._append("request", asdict(request))
+
+    def append_grant(self, grant: ApprovalGrant) -> None:
+        self._append("grant", asdict(grant))
+
+    def append_denial(self, request: ApprovalRequest, denied_by: str = "local_user") -> None:
+        self._append("denial", {"approval_request_id": request.approval_request_id, "task_id": request.task_id, "action_id": request.action_id, "denied_by": denied_by})
+
+    def list_events(self) -> list[dict[str, Any]]:
+        if not self.path.exists():
+            return []
+        events = []
+        with self.path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    events.append(json.loads(line))
+        return events
+
+    def grants_for_action(self, action: ActionIR) -> list[ApprovalGrant]:
+        action_hash = sha256_json(asdict(action))
+        grants: list[ApprovalGrant] = []
+        for event in self.list_events():
+            if event.get("event_type") != "grant":
+                continue
+            payload = event.get("payload", {})
+            if payload.get("approved_action_hash") == action_hash:
+                grants.append(ApprovalGrant(**payload))
+        return grants
+
+    def latest_valid_grant(self, action: ActionIR, center: ApprovalCenter | None = None, **validate_kwargs: Any) -> ApprovalGrant | None:
+        validator = center or ApprovalCenter()
+        for grant in reversed(self.grants_for_action(action)):
+            ok, _reason = validator.validate(grant, action, **validate_kwargs)
+            if ok:
+                return grant
+        return None
+
+    def _append(self, event_type: str, payload: dict[str, Any]) -> None:
+        event = {
+            "event_type": event_type,
+            "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "payload": payload,
+        }
+        with self.path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")

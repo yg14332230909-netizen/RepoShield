@@ -1,13 +1,14 @@
 """Convert raw coding-agent tool calls to ActionIR."""
 from __future__ import annotations
 
+import base64
 import re
 import shlex
 from pathlib import Path
 
 from .models import ActionIR, Risk, new_id
 
-NETWORK_CMD_RE = re.compile(r"\b(curl|wget|httpie|nc|netcat|nslookup|dig|ssh|scp|ftp)\b", re.I)
+NETWORK_CMD_RE = re.compile(r"\b(curl|wget|httpie|nc|netcat|nslookup|dig|ssh|scp|ftp|Invoke-WebRequest|Invoke-RestMethod|iwr|irm|Start-BitsTransfer)\b", re.I)
 PY_NODE_EGRESS_RE = re.compile(r"\b(python|python3|node)\b.*\b(requests|urllib|fetch|http\.|https\.|net\.|socket)\b", re.I | re.S)
 SECRET_PATH_RE = re.compile(r"(^|[\s'\"`|<>=:])(~?/)?(\.env(\.[\w.-]+)?|secrets/|\.ssh/|id_rsa|id_ed25519|\.npmrc|\.pypirc)([\s'\"`|;]|$)", re.I)
 PUBLISH_RE = re.compile(r"\b(npm\s+publish|twine\s+upload|docker\s+push|gh\s+release\s+create)\b", re.I)
@@ -17,6 +18,9 @@ INSTALL_RE = re.compile(r"\b(npm|pnpm|yarn|pip|pip3|poetry|cargo|go)\s+(install|
 REGISTRY_CONFIG_RE = re.compile(r"\b(npm\s+config\s+set\s+registry|pip\s+config\s+set|\.npmrc|\.pypirc)\b", re.I)
 CI_PATH_RE = re.compile(r"\.github/workflows/.*\.(yml|yaml)$", re.I)
 COMPOUND_SPLIT_RE = re.compile(r"\s*(?:&&|\|\||;|\|)\s*")
+SHELL_WRAPPER_RE = re.compile(r"^\s*(?:bash|sh|zsh|cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh(?:\.exe)?)\s+(?:-Command|-c|/c)\s+(.+)$", re.I | re.S)
+POWERSHELL_ENCODED_RE = re.compile(r"\b(?:powershell(?:\.exe)?|pwsh(?:\.exe)?)\b.*(?:-enc|-encodedcommand)\s+([A-Za-z0-9+/=]+)", re.I)
+DESTRUCTIVE_FILE_RE = re.compile(r"(?:\brm\s+-rf\b|\bRemove-Item\b.*-Recurse\b|\bdel\s+/[sq]\b|\brmdir\s+/[sq]\b|\bchmod\s+777\b|\bchown\s+-R\b)", re.I | re.S)
 
 
 class ActionParser:
@@ -28,6 +32,7 @@ class ActionParser:
         source_ids: list[str] | None = None,
         file_path: str | None = None,
         operation: str | None = None,
+        _depth: int = 0,
     ) -> ActionIR:
         source_ids = source_ids or []
         tool_norm = tool.lower()
@@ -35,6 +40,23 @@ class ActionParser:
         raw = raw_action.strip()
         cwd_s = str(cwd)
         command_parts = self._split_compound(raw)
+
+        if _depth < 2:
+            decoded = self._decode_powershell_encoded(raw)
+            if decoded:
+                action = self.parse(decoded, tool=tool, cwd=cwd, source_ids=source_ids, file_path=file_path, operation=operation, _depth=_depth + 1)
+                action.raw_action = raw
+                action.risk_tags = list(dict.fromkeys([*action.risk_tags, "encoded_command", "obfuscated_shell"]))
+                action.metadata.update({"decoded_action": decoded, "wrapper": "powershell_encoded"})
+                return action
+
+            wrapped = self._extract_shell_wrapper(raw)
+            if wrapped:
+                action = self.parse(wrapped, tool=tool, cwd=cwd, source_ids=source_ids, file_path=file_path, operation=operation, _depth=_depth + 1)
+                action.raw_action = raw
+                action.risk_tags = list(dict.fromkeys([*action.risk_tags, "shell_wrapper"]))
+                action.metadata.update({"inner_action": wrapped, "wrapper": "shell"})
+                return action
 
         if tool_norm == "mcp":
             capability = "deploy" if re.search(r"deploy|publish|delete|remove|destroy", raw, re.I) else "write" if re.search(r"create|update|write", raw, re.I) else "read"
@@ -52,7 +74,7 @@ class ActionParser:
                 source_ids, 0.88, True, command_parts,
             )
 
-        if SECRET_PATH_RE.search(raw) and re.search(r"\b(cat|less|more|grep|sed|awk|printenv|env|python|node)\b", raw, re.I):
+        if SECRET_PATH_RE.search(raw) and re.search(r"\b(cat|less|more|grep|sed|awk|printenv|env|python|node|Get-Content|gc|type)\b", raw, re.I):
             return ActionIR(
                 action_id, raw, tool, cwd_s, "read_secret_file", "critical",
                 ["secret_access", "credential_exposure"], self._extract_secret_paths(raw), ["block"],
@@ -109,7 +131,14 @@ class ActionParser:
                 ["read_only"], self._extract_paths(raw), [], source_ids, 0.8, False, command_parts,
             )
 
-        side_effect = bool(re.search(r"\b(rm|mv|cp|chmod|chown|touch|echo|python|node|bash|sh|make|docker|gh)\b|>|>>", raw, re.I))
+        if DESTRUCTIVE_FILE_RE.search(raw):
+            return ActionIR(
+                action_id, raw, tool, cwd_s, "unknown_side_effect", "critical",
+                ["destructive_file_operation", "parser_uncertain"], self._extract_paths(raw), ["sandbox_then_approval"],
+                source_ids, 0.72, True, command_parts,
+            )
+
+        side_effect = bool(re.search(r"\b(rm|mv|cp|chmod|chown|touch|echo|python|node|bash|sh|make|docker|gh|powershell|pwsh|cmd|Remove-Item|del|rmdir)\b|>|>>", raw, re.I))
         if not side_effect:
             return ActionIR(
                 action_id, raw, tool, cwd_s, "read_project_file", "low",
@@ -212,5 +241,38 @@ class ActionParser:
         m = re.search(r"https?://([^/\s'\"]+)", raw, re.I)
         if m:
             return m.group(1)
-        m = re.search(r"\b(?:curl|wget|nc|netcat|ssh|scp)\s+([^\s'\"]+)", raw, re.I)
+        m = re.search(r"\b(?:curl|wget|nc|netcat|ssh|scp|Invoke-WebRequest|Invoke-RestMethod|iwr|irm)\s+([^\s'\"]+)", raw, re.I)
         return m.group(1) if m else None
+
+    @staticmethod
+    def _extract_shell_wrapper(raw: str) -> str | None:
+        m = SHELL_WRAPPER_RE.search(raw)
+        if not m:
+            return None
+        inner = m.group(1).strip()
+        try:
+            parts = shlex.split(inner)
+            if len(parts) == 1:
+                inner = parts[0]
+        except ValueError:
+            inner = inner.strip("'\"")
+        return inner.strip("'\"") or None
+
+    @staticmethod
+    def _decode_powershell_encoded(raw: str) -> str | None:
+        m = POWERSHELL_ENCODED_RE.search(raw)
+        if not m:
+            return None
+        token = m.group(1)
+        try:
+            data = base64.b64decode(token + "=" * (-len(token) % 4), validate=False)
+        except Exception:
+            return None
+        for encoding in ("utf-16le", "utf-8"):
+            try:
+                decoded = data.decode(encoding).strip("\x00 \r\n\t")
+            except UnicodeDecodeError:
+                continue
+            if decoded:
+                return decoded
+        return None

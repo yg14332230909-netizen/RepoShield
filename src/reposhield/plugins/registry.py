@@ -8,7 +8,18 @@ from .tool_parser import GenericJSONToolParser, ToolParseResult, ToolParser
 
 class ToolParserRegistry:
     def __init__(self) -> None:
-        self._parsers: dict[str, ToolParser] = {"generic_json": GenericJSONToolParser(), "openai": GenericJSONToolParser(), "cline_like": GenericJSONToolParser(), "aider": GenericJSONToolParser()}
+        generic = GenericJSONToolParser()
+        self._parsers: dict[str, ToolParser] = {
+            "generic_json": generic,
+            "openai": generic,
+            "codex": generic,
+            "cline": generic,
+            "cline_like": generic,
+            "claude_code": generic,
+            "anthropic": generic,
+            "aider": generic,
+            "openhands": generic,
+        }
         self.default_agent = "generic_json"
 
     def register(self, agent_type: str, parser: ToolParser) -> None:

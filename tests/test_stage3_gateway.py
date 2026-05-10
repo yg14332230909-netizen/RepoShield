@@ -135,6 +135,15 @@ def test_tool_parser_registry_conservative_fallback():
     assert parsed.parser_confidence < 0.5
 
 
+def test_tool_parser_registry_understands_common_agent_aliases():
+    registry = ToolParserRegistry()
+    assert "codex" in registry.agents()
+    assert "claude_code" in registry.agents()
+    parsed = registry.parse({"type": "tool_use", "name": "Bash", "input": {"command": "npm test"}}, agent_type="claude_code")
+    assert parsed.canonical_tool == "bash_exec"
+    assert parsed.raw_action == "npm test"
+
+
 def test_taint_registry_inherits_untrusted_file_write():
     registry = TwoLayerRegistry()
     store = TaintStore(registry)

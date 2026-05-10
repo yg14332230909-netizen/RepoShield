@@ -43,7 +43,7 @@ def decode_openai_tool_call(tool_call: dict[str, Any]) -> tuple[str, dict[str, A
         args = fn.get("arguments", {})
     else:
         name = str(tool_call.get("name") or tool_call.get("tool_name") or tool_call.get("type") or "unknown_tool")
-        args = tool_call.get("arguments", tool_call.get("args", {}))
+        args = tool_call.get("arguments", tool_call.get("args", tool_call.get("input", {})))
     if isinstance(args, str):
         try:
             args = json.loads(args) if args.strip() else {}
