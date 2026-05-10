@@ -248,6 +248,10 @@ class PolicyDecision:
     intent_diff: IntentDiff | None = None
     package_event_id: str | None = None
     exec_trace_id: str | None = None
+    matched_rules: list[dict[str, Any]] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    policy_version: str = ""
+    rule_trace: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)

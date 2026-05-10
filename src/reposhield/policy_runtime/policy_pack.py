@@ -34,13 +34,23 @@ class RuntimePolicyResult:
 class PolicyRuntime:
     """Wrap the core PolicyEngine decision with enforce/observe/warn behavior."""
 
-    def __init__(self, mode: PolicyMode = "enforce", role: str = "local_dev_strict") -> None:
+    def __init__(self, mode: PolicyMode = "enforce", role: str = "local_dev_strict", *, unsafe_allow_disabled: bool = False) -> None:
+        if mode == "disabled" and not unsafe_allow_disabled:
+            raise ValueError("policy disabled mode requires explicit unsafe_allow_disabled=True")
         self.mode = mode
         self.role = role
+        self.unsafe_allow_disabled = unsafe_allow_disabled
 
     def apply(self, decision: PolicyDecision, policy_name: str = "CoreRepoShieldPolicy") -> RuntimePolicyResult:
         would_block = decision.decision in {"block", "quarantine", "sandbox_then_approval"}
-        hit = PolicyHit(policy_name, self.mode, decision.reason_codes, decision.decision, would_block, {"risk_score": decision.risk_score})
+        hit = PolicyHit(
+            policy_name,
+            self.mode,
+            decision.reason_codes,
+            decision.decision,
+            would_block,
+            {"risk_score": decision.risk_score, "policy_version": decision.policy_version, "unsafe_allow_disabled": self.unsafe_allow_disabled},
+        )
         if self.mode == "disabled":
             return RuntimePolicyResult("allow", decision.decision, self.mode, [hit], warning="policy disabled")
         if self.mode == "observe_only":

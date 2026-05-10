@@ -33,12 +33,13 @@ class RepoShieldGateway:
         policy_config: str | Path | None = None,
         release_mode: str = "gateway_only",
         approval_store_path: str | Path | None = None,
+        unsafe_allow_disabled_policy: bool = False,
     ) -> None:
         self.repo_root = Path(repo_root).resolve()
         self.audit = AuditLog(audit_path or self.repo_root / ".reposhield" / "gateway_audit.jsonl")
         self.policy_config = policy_config
         self.cp = self._new_request_control_plane()
-        self.policy_runtime = PolicyRuntime(mode=policy_mode, role=policy_role)  # type: ignore[arg-type]
+        self.policy_runtime = PolicyRuntime(mode=policy_mode, role=policy_role, unsafe_allow_disabled=unsafe_allow_disabled_policy)  # type: ignore[arg-type]
         self.upstream = upstream or LocalHeuristicUpstream()
         self.agent_type = agent_type
         self.registry = ToolParserRegistry()
@@ -115,7 +116,7 @@ class RepoShieldGateway:
 
 
 def simulate_gateway_request(repo_root: str | Path, request: dict[str, Any], audit_path: str | Path | None = None, policy_mode: str = "enforce") -> dict[str, Any]:
-    gw = RepoShieldGateway(repo_root, audit_path=audit_path, policy_mode=policy_mode)
+    gw = RepoShieldGateway(repo_root, audit_path=audit_path, policy_mode=policy_mode, unsafe_allow_disabled_policy=bool(request.get("unsafe_allow_disabled_policy")))
     return gw.handle_chat_completion(request)
 
 
@@ -149,6 +150,7 @@ def serve_gateway(
     policy_config: str | Path | None = None,
     gateway_api_key: str | None = None,
     release_mode: str = "gateway_only",
+    unsafe_allow_disabled_policy: bool = False,
 ) -> None:
     """Start a tiny standard-library OpenAI-compatible HTTP server.
 
@@ -158,12 +160,15 @@ def serve_gateway(
     """
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+    if policy_mode == "disabled" and host not in {"127.0.0.1", "localhost", "::1"}:
+        raise RuntimeError("Refusing to run disabled policy mode on a non-loopback gateway host.")
     gateway = RepoShieldGateway(
         repo_root,
         audit_path=audit_path,
         policy_mode=policy_mode,
         policy_config=policy_config,
         release_mode=release_mode,
+        unsafe_allow_disabled_policy=unsafe_allow_disabled_policy,
         upstream=make_upstream(
             upstream_base_url=upstream_base_url,
             upstream_api_key=upstream_api_key,

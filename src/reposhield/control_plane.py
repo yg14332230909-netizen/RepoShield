@@ -10,6 +10,8 @@ from .asset import AssetScanner
 from .audit import AuditLog
 from .context import ContextProvenance
 from .contract import TaskContractBuilder
+from .mcp_proxy import MCPProxy
+from .memory import MemoryStore
 from .models import ActionIR, PolicyDecision, RepoAssetGraph, SourceRecord, TaskContract
 from .package_guard import PackageGuard
 from .policy import PolicyEngine
@@ -40,6 +42,8 @@ class RepoShieldControlPlane:
         self.package_guard = PackageGuard(self.repo_root)
         self.sandbox = SandboxRunner(self.repo_root)
         self.sentry = SecretSentry(self.asset_graph)
+        self.mcp_proxy = MCPProxy(self.provenance)
+        self.memory = MemoryStore(self.repo_root / ".reposhield" / "memory.json")
         self.contract_builder = TaskContractBuilder()
         self.contract: TaskContract | None = None
         self.audit.append("asset_scan", asdict(self.asset_graph), actor="asset_scanner")
@@ -48,6 +52,7 @@ class RepoShieldControlPlane:
         """Start a fresh per-request task context while keeping shared repo services."""
         self.provenance = ContextProvenance()
         self.sentry = SecretSentry(self.asset_graph)
+        self.mcp_proxy = MCPProxy(self.provenance)
         self.contract = None
 
     def ingest_source(self, source_type: str, content: str, retrieval_path: str = "", source_id: str | None = None) -> SourceRecord:
@@ -97,6 +102,22 @@ class RepoShieldControlPlane:
         package_event = self.package_guard.analyze(action)
         if package_event:
             self.audit.append("package_event", asdict(package_event), task_id=self.contract.task_id, actor="package_guard", action_id=action.action_id)
+
+        mcp_invocation = None
+        if action.semantic_action in {"invoke_mcp_tool", "invoke_destructive_mcp_tool"}:
+            mcp_args = action.metadata.get("mcp_args") if isinstance(action.metadata.get("mcp_args"), dict) else {"raw_action": action.raw_action}
+            server_id = str(action.metadata.get("mcp_server_id") or "mcp_adapter")
+            tool_name = str(action.metadata.get("mcp_tool_name") or action.raw_action)
+            mcp_invocation = self.mcp_proxy.invoke(server_id, tool_name, mcp_args)
+            self.audit.append("mcp_invocation", asdict(mcp_invocation), task_id=self.contract.task_id, actor="mcp_proxy", source_ids=action.source_ids, action_id=action.action_id)
+            if mcp_invocation.output_source_id:
+                self.audit.append("source_ingested", {"source_id": mcp_invocation.output_source_id, "source_type": "mcp_output"}, task_id=self.contract.task_id, actor="mcp_proxy", source_ids=[mcp_invocation.output_source_id], action_id=action.action_id)
+
+        if action.semantic_action == "memory_write":
+            record = self.memory.write(action.raw_action, action.source_ids, self.provenance.graph, created_by="control_plane")
+            self.audit.append("memory_event", asdict(record), task_id=self.contract.task_id, actor="memory_store", source_ids=action.source_ids, action_id=action.action_id)
+        elif action.semantic_action == "memory_read":
+            self.audit.append("memory_event", {"event": "memory_read_requested", "raw_action_hash": action.raw_action}, task_id=self.contract.task_id, actor="memory_store", source_ids=action.source_ids, action_id=action.action_id)
 
         # First decision: may already hard-block before sandbox. Preflight can enrich evidence for high-risk actions.
         decision = self.policy.decide(self.contract, action, self.asset_graph, self.provenance.graph, package_event=package_event, secret_event=secret_event)

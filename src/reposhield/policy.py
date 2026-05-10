@@ -108,6 +108,14 @@ class PolicyEngine:
         if action.semantic_action == "invoke_destructive_mcp_tool":
             return self._decision(action, "block", max(score, 90), [*reason_codes, "destructive_mcp_tool"], ["mcp_proxy", "human_approval"], "Destructive MCP tools are blocked.", intent, package_event, exec_trace)
 
+        if action.semantic_action == "memory_write":
+            if context_graph.has_untrusted(action.source_ids):
+                return self._decision(action, "allow_in_sandbox", max(score, 60), [*reason_codes, "tainted_memory_write"], ["memory_taint", "ttl"], "Memory writes influenced by untrusted context are tainted and cannot authorize high-risk actions.", intent, package_event, exec_trace)
+            return self._decision(action, "allow", max(score, 35), reason_codes, ["memory_ttl"], "Trusted memory write is allowed with TTL.", intent, package_event, exec_trace)
+
+        if action.semantic_action == "memory_read":
+            return self._decision(action, "allow_in_sandbox", max(score, 45), [*reason_codes, "memory_read_as_context"], ["memory_taint_check"], "Memory reads are treated as context and rechecked for taint.", intent, package_event, exec_trace)
+
         if action.semantic_action == "unknown_side_effect":
             return self._decision(action, "sandbox_then_approval", max(score, 82), [*reason_codes, "parser_confidence_below_threshold"], ["sandbox_preflight", "human_approval"], "Unknown side effects fail closed.", intent, package_event, exec_trace)
 
@@ -130,6 +138,12 @@ class PolicyEngine:
         # Stable unique reason/control lists while preserving order.
         dedup_reasons = list(dict.fromkeys(reasons))
         dedup_controls = list(dict.fromkeys(controls))
+        matched_rules = self._matched_rules(action, decision, dedup_reasons)
+        evidence_refs = [*action.source_ids]
+        if package_event:
+            evidence_refs.append(package_event.package_event_id)
+        if exec_trace:
+            evidence_refs.append(exec_trace.exec_trace_id)
         return PolicyDecision(
             decision_id=new_id("dec"),
             action_id=action.action_id,
@@ -141,4 +155,45 @@ class PolicyEngine:
             intent_diff=intent,
             package_event_id=package_event.package_event_id if package_event else None,
             exec_trace_id=exec_trace.exec_trace_id if exec_trace else None,
+            matched_rules=matched_rules,
+            evidence_refs=list(dict.fromkeys(evidence_refs)),
+            policy_version=self.policy_version,
+            rule_trace=[
+                {
+                    "semantic_action": action.semantic_action,
+                    "risk": action.risk,
+                    "source_ids": action.source_ids,
+                    "reason_codes": dedup_reasons,
+                    "decision": decision,
+                }
+            ],
         )
+
+    def _matched_rules(self, action: ActionIR, decision: str, reason_codes: list[str]) -> list[dict[str, str]]:
+        rule_id = "RS-DEFAULT-001"
+        category = "default"
+        if action.semantic_action == "read_secret_file":
+            rule_id, category = "RS-SECRET-001", "secret"
+        elif action.semantic_action in {"install_git_dependency", "install_tarball_dependency", "install_registry_dependency"}:
+            rule_id, category = "RS-SC-001", "supply_chain"
+        elif action.semantic_action in {"send_network_request"}:
+            rule_id, category = "RS-NET-001", "egress"
+        elif action.semantic_action in {"modify_ci_pipeline", "publish_artifact", "git_push_force"}:
+            rule_id, category = "RS-RELEASE-001", "release"
+        elif action.semantic_action in {"invoke_mcp_tool", "invoke_destructive_mcp_tool"}:
+            rule_id, category = "RS-MCP-001", "mcp"
+        elif action.semantic_action in {"memory_write", "memory_read"}:
+            rule_id, category = "RS-MEM-001", "memory"
+        elif action.semantic_action in {"run_tests"}:
+            rule_id, category = "RS-SANDBOX-001", "sandbox"
+        elif action.semantic_action in {"unknown_side_effect"}:
+            rule_id, category = "RS-PARSER-001", "parser"
+        return [
+            {
+                "rule_id": rule_id,
+                "name": category,
+                "category": category,
+                "decision": decision,
+                "reason_codes": ",".join(reason_codes),
+            }
+        ]

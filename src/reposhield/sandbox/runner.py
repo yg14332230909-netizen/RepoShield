@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -134,9 +135,17 @@ class SubprocessOverlayBackend(DryRunBackend):
             dst = temp / "repo"
             shutil.copytree(self.repo_root, dst, ignore=_ignore_sensitive)
             env = {k: v for k, v in os.environ.items() if not _is_secret_env(k)}
-            proc = subprocess.run(raw, cwd=dst, shell=True, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            try:
+                args = shlex.split(raw)
+            except ValueError:
+                trace.risk_observed.append("sandbox_command_parse_failed")
+                trace.recommended_decision = "sandbox_then_approval"
+                trace.trace_complete = False
+                return trace
+            proc = subprocess.run(args, cwd=dst, shell=False, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
             trace.exit_code = proc.returncode
             trace.files_read.extend(["src/**", "tests/**"])
+            trace.diff_summary.append("safe test executed in overlay with shell disabled and secret env removed")
             if proc.returncode != 0:
                 trace.risk_observed.append("test_failure")
         except subprocess.TimeoutExpired:

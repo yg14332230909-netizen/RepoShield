@@ -27,4 +27,10 @@ class InstructionLowerer:
         action.metadata["instruction_hash"] = instruction.instruction_hash
         action.metadata["canonical_tool"] = parse.get("canonical_tool")
         action.parser_confidence = min(action.parser_confidence, float(parse.get("parser_confidence") or instruction.parser_confidence or action.parser_confidence))
+        canonical_tool = str(parse.get("canonical_tool") or "")
+        if canonical_tool in {"memory_write", "memory_read"}:
+            action.semantic_action = canonical_tool
+            action.risk = "high" if canonical_tool == "memory_write" else "medium"
+            action.risk_tags = list(dict.fromkeys([*action.risk_tags, "memory", canonical_tool]))
+            action.requires = list(dict.fromkeys([*action.requires, "memory_policy"]))
         return action

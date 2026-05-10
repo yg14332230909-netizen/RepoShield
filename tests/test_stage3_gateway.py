@@ -315,6 +315,16 @@ def test_policy_runtime_observe_only_does_not_effectively_block(tmp_path: Path):
     assert runtime["warning"] == "observe_only:would_block"
 
 
+def test_gateway_disabled_policy_requires_explicit_unsafe_flag(tmp_path: Path):
+    repo = make_repo(tmp_path)
+    try:
+        RepoShieldGateway(repo, audit_path=tmp_path / "audit.jsonl", policy_mode="disabled")
+    except ValueError as exc:
+        assert "unsafe_allow_disabled" in str(exc)
+    else:
+        raise AssertionError("disabled policy mode should require explicit unsafe flag")
+
+
 def test_tool_parser_registry_conservative_fallback():
     parsed = ToolParserRegistry().parse({"id": "u1", "function": {"name": "mystery_tool", "arguments": json.dumps({"payload": "do something"})}}, agent_type="openai")
     assert parsed.canonical_tool == "unknown_side_effect"
