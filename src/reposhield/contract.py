@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import fnmatch
-import re
 from pathlib import PurePosixPath
 
 from .models import ActionIR, IntentDiff, TaskContract, new_id

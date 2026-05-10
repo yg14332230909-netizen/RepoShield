@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from pathlib import Path
 
-from reposhield.action_parser import ActionParser
 from reposhield.adapters.aider import AiderAdapter
 from reposhield.adapters.guarded_exec import GuardedExecAdapter
 from reposhield.agent_init import init_agent
 from reposhield.approvals import ApprovalCenter
 from reposhield.bench_suite import generate_stage2_samples, run_suite
 from reposhield.control_plane import RepoShieldControlPlane
-from reposhield.dashboard import render_dashboard
 from reposhield.memory import MemoryStore
 from reposhield.models import ExecTrace, new_id
 from reposhield.report import render_incident_html

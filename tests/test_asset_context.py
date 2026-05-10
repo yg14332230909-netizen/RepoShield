@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from reposhield.asset import AssetScanner
 from reposhield.context import ContextProvenance

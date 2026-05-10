@@ -1,7 +1,7 @@
 """Small YAML-free policy registry for demo policy packs."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(slots=True)

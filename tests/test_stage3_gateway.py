@@ -8,7 +8,6 @@ from reposhield.gateway.openai_compat import chat_completion_stream_events
 from reposhield.gateway_bench import generate_stage3_gateway_samples, run_gateway_suite
 from reposhield.instruction_ir import InstructionBuilder, InstructionLowerer
 from reposhield.plugins import ToolParserRegistry
-from reposhield.policy_runtime import PolicyRuntime
 from reposhield.registry import TaintStore, TwoLayerRegistry
 
 

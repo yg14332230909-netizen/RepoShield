@@ -1,7 +1,6 @@
 """Response transformation after policy decisions."""
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import Any
 
 from .openai_compat import assistant_message_response, safe_block_message

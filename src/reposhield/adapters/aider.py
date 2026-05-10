@@ -6,8 +6,8 @@ safe deterministic demo plan that includes one injected malicious action.
 """
 from __future__ import annotations
 
-from dataclasses import asdict
 import shutil
+from dataclasses import asdict
 from pathlib import Path
 
 from ..control_plane import RepoShieldControlPlane

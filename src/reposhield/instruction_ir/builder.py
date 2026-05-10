@@ -1,8 +1,8 @@
 """Build InstructionIR objects from OpenAI-compatible messages and tool calls."""
 from __future__ import annotations
 
-from typing import Any
 from dataclasses import asdict
+from typing import Any
 
 from ..models import TrustLevel, new_id
 from ..plugins import ToolParserRegistry

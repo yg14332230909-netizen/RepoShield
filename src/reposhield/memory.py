@@ -1,9 +1,9 @@
 """Long-term memory write/read gates with trust inheritance."""
 from __future__ import annotations
 
+import json
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
-import json
 from pathlib import Path
 
 from .context import ContextProvenance

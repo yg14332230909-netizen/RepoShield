@@ -5,13 +5,13 @@ replayed and consumed by other coding-agent adapters.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
-import hashlib
-import json
-import uuid
 
 Risk = Literal["low", "medium", "high", "critical"]
 TrustLevel = Literal["admin", "trusted", "semi_trusted", "untrusted", "tool_untrusted", "tainted", "unknown"]

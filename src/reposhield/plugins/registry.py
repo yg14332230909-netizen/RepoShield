@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .tool_parser import GenericJSONToolParser, ToolParseResult, ToolParser
+from .tool_parser import GenericJSONToolParser, ToolParser, ToolParseResult
 
 
 class ToolParserRegistry:

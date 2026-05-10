@@ -1,11 +1,11 @@
 """Command-line interface for RepoShield/PepoShield."""
 from __future__ import annotations
 
-from dataclasses import asdict
 import argparse
 import json
 import sys
 import tempfile
+from dataclasses import asdict
 from pathlib import Path
 
 from .action_parser import ActionParser

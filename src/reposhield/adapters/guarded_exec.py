@@ -1,9 +1,9 @@
 """Guarded command adapter for real agent shell-tool integration."""
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import shlex
 import subprocess
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from ..control_plane import RepoShieldControlPlane

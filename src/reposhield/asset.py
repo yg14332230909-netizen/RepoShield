@@ -1,9 +1,9 @@
 """Repository asset and attack-surface scanner."""
 from __future__ import annotations
 
-from dataclasses import asdict
 import os
 import re
+from dataclasses import asdict
 from pathlib import Path
 from typing import Iterable
 

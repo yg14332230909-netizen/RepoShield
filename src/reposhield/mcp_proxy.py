@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict
 
 from .context import ContextProvenance
 from .models import MCPInvocation, MCPServerManifest, new_id, sha256_json

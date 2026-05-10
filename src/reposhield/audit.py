@@ -1,9 +1,9 @@
 """Hash-chain audit log and replay bundle support."""
 from __future__ import annotations
 
-from dataclasses import asdict
 import json
 import shutil
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -85,7 +85,6 @@ class AuditLog:
         seen: set[str] = set()
         for event in self.read_events():
             event_id = event["event_id"]
-            payload = event.get("payload", {})
             node_type = event.get("event_type", "event")
             if event_id not in seen:
                 nodes.append({"id": event_id, "type": node_type, "label": self._label_for(event), "hash": event.get("event_hash")})

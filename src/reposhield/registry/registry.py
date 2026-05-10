@@ -1,8 +1,8 @@
 """Two-layer RepoShield registry: immutable source rules + user/project overrides."""
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import fnmatch
+from dataclasses import asdict, dataclass, field
 from pathlib import PurePosixPath
 from typing import Any
 

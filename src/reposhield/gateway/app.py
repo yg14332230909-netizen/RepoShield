@@ -1,13 +1,14 @@
 """RepoShield OpenAI-compatible Governance Gateway."""
 from __future__ import annotations
 
-from dataclasses import asdict
 import json
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from ..control_plane import RepoShieldControlPlane
-from ..instruction_ir import InstructionBuilder, InstructionLowerer, to_dict as instruction_to_dict
+from ..instruction_ir import InstructionBuilder, InstructionLowerer
+from ..instruction_ir import to_dict as instruction_to_dict
 from ..models import new_id, sha256_json
 from ..plugins import ToolParserRegistry
 from ..policy_runtime import PolicyRuntime

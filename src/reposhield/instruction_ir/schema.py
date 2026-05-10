@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
-from ..models import Risk, TrustLevel, new_id, sha256_json, utc_now
+from ..models import Risk, new_id, sha256_json, utc_now
 
 InstructionKind = Literal["message", "plan", "tool_call", "tool_result", "confirmation"]
 InstructionType = Literal["READ", "WRITE", "EXEC", "NETWORK", "MEMORY", "MCP", "PLAN", "UNKNOWN"]

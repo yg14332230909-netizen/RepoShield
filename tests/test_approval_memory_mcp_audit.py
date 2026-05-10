@@ -1,4 +1,3 @@
-from dataclasses import asdict
 
 from reposhield.action_parser import ActionParser
 from reposhield.approvals import ApprovalCenter, ApprovalStore

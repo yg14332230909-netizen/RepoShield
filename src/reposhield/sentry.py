@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from .models import ActionIR, RepoAssetGraph, SecretTaintEvent, new_id, sha256_text
 

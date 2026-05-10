@@ -5,8 +5,8 @@ allowed by RepoShield are applied; dangerous actions are never passed through.
 """
 from __future__ import annotations
 
-from dataclasses import asdict
 import subprocess
+from dataclasses import asdict
 from pathlib import Path
 
 from ..control_plane import RepoShieldControlPlane

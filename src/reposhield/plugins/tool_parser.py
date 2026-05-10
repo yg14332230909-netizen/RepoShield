@@ -6,9 +6,9 @@ ToolParseResult and then lowers it to ActionIR.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import re
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from ..models import Risk
