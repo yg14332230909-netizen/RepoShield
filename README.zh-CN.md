@@ -204,9 +204,9 @@ tests/                                自动化测试
 
 1. [真实 Agent 接入指南](docs/REAL_AGENT_INTEGRATION.zh-CN.md)
 2. [文档地图](docs/README.zh-CN.md)
-3. [Gateway 指南](docs/GATEWAY_GUIDE.zh-CN.md)
-4. [Tool Parser Plugin 指南](docs/TOOL_PARSER_PLUGIN_GUIDE.zh-CN.md)
-5. [Gateway Bench 指南](docs/BENCH_GATEWAY_GUIDE.zh-CN.md)
+3. [Agent 接入配方：Cline / Codex / OpenHands](docs/AGENT_EXEC_GUARD_RECIPES.zh-CN.md)
+4. [Gateway 指南](docs/GATEWAY_GUIDE.zh-CN.md)
+5. [Tool Parser Plugin 指南](docs/TOOL_PARSER_PLUGIN_GUIDE.zh-CN.md)
 
 ## 验证状态
 

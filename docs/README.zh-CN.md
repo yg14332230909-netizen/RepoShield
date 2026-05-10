@@ -18,6 +18,7 @@
 接入真实 agent：
 
 - [真实 Agent 接入指南](REAL_AGENT_INTEGRATION.zh-CN.md)
+- [Agent 接入配方：Cline / Codex / OpenHands](AGENT_EXEC_GUARD_RECIPES.zh-CN.md)
 - [Gateway 指南](GATEWAY_GUIDE.zh-CN.md)
 - [Tool Parser Plugin 指南](TOOL_PARSER_PLUGIN_GUIDE.zh-CN.md)
 - [Adapter 指南](ADAPTER_GUIDE.zh-CN.md)
@@ -52,6 +53,7 @@
 README.zh-CN.md
 docs/README.zh-CN.md
 docs/REAL_AGENT_INTEGRATION.zh-CN.md
+docs/AGENT_EXEC_GUARD_RECIPES.zh-CN.md
 docs/GATEWAY_GUIDE.zh-CN.md
 docs/TOOL_PARSER_PLUGIN_GUIDE.zh-CN.md
 ```
@@ -63,4 +65,3 @@ docs/TOOL_PARSER_PLUGIN_GUIDE.zh-CN.md
 ```text
 先让别人看懂项目 -> 再让真实 agent 改 base_url 接入 -> 再补 streaming / sandbox / approval UI / agent 专用 adapter
 ```
-

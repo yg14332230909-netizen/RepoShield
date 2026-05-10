@@ -256,6 +256,12 @@ PYTHONPATH=src python -m reposhield exec-guard \
 
 如果 `issue.md` 是不可信来源，这类供应链动作会在执行前被阻断。
 
+Cline / Codex / OpenHands 的配置示例见：
+
+```text
+docs/AGENT_EXEC_GUARD_RECIPES.zh-CN.md
+```
+
 ## 当前完整度判断
 
 适合：

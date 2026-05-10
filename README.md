@@ -122,6 +122,6 @@ Recommended reading order:
 
 1. [README.zh-CN.md](README.zh-CN.md)
 2. [Real Agent Integration](docs/REAL_AGENT_INTEGRATION.zh-CN.md)
-3. [Documentation Map](docs/README.zh-CN.md)
-4. [Gateway Guide](docs/GATEWAY_GUIDE.zh-CN.md)
-5. [Tool Parser Plugin Guide](docs/TOOL_PARSER_PLUGIN_GUIDE.zh-CN.md)
+3. [Agent exec-guard recipes](docs/AGENT_EXEC_GUARD_RECIPES.zh-CN.md)
+4. [Documentation Map](docs/README.zh-CN.md)
+5. [Gateway Guide](docs/GATEWAY_GUIDE.zh-CN.md)
