@@ -72,14 +72,29 @@ def chat_completion_stream_events(response: dict[str, Any]) -> list[bytes]:
         )
 
     tool_calls = message.get("tool_calls") or []
-    if tool_calls:
+    for index, tool_call in enumerate(tool_calls):
+        chunk_call: dict[str, Any] = {"index": index}
+        if tool_call.get("id"):
+            chunk_call["id"] = tool_call["id"]
+        if tool_call.get("type"):
+            chunk_call["type"] = tool_call["type"]
+        function = tool_call.get("function") or {}
+        if function:
+            chunk_call["function"] = {
+                key: value
+                for key, value in {
+                    "name": function.get("name"),
+                    "arguments": function.get("arguments"),
+                }.items()
+                if value is not None
+            }
         events.append(
             {
                 "id": stream_id,
                 "object": "chat.completion.chunk",
                 "created": created,
                 "model": model,
-                "choices": [{"index": 0, "delta": {"tool_calls": tool_calls}, "finish_reason": None}],
+                "choices": [{"index": 0, "delta": {"tool_calls": [chunk_call]}, "finish_reason": None}],
             }
         )
 

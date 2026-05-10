@@ -7,6 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from ..approvals import ApprovalCenter, ApprovalStore
 from ..audit import AuditLog
 from ..control_plane import RepoShieldControlPlane
 from ..instruction_ir import InstructionBuilder, InstructionLowerer
@@ -14,7 +15,6 @@ from ..instruction_ir import to_dict as instruction_to_dict
 from ..models import new_id, sha256_json
 from ..plugins import ToolParserRegistry
 from ..policy_runtime import PolicyRuntime
-from .confirmation_flow import GatewayConfirmationFlow
 from .openai_compat import chat_completion_stream_events, extract_messages, latest_user_text
 from .response_transform import transform_response
 from .trace_state import GatewayTrace
@@ -32,6 +32,7 @@ class RepoShieldGateway:
         agent_type: str = "openai",
         policy_config: str | Path | None = None,
         release_mode: str = "gateway_only",
+        approval_store_path: str | Path | None = None,
     ) -> None:
         self.repo_root = Path(repo_root).resolve()
         self.audit = AuditLog(audit_path or self.repo_root / ".reposhield" / "gateway_audit.jsonl")
@@ -42,6 +43,8 @@ class RepoShieldGateway:
         self.agent_type = agent_type
         self.registry = ToolParserRegistry()
         self.release_mode = release_mode
+        self.approvals = ApprovalCenter()
+        self.approval_store = ApprovalStore(approval_store_path or self.repo_root / ".reposhield" / "gateway_approvals.jsonl")
 
     def _new_request_control_plane(self) -> RepoShieldControlPlane:
         return RepoShieldControlPlane(self.repo_root, audit=self.audit, policy_config=self.policy_config)
@@ -50,7 +53,6 @@ class RepoShieldGateway:
         cp = self._new_request_control_plane()
         self.cp = cp
         lowerer = InstructionLowerer(cp.parser)
-        confirmations = GatewayConfirmationFlow()
         trace = GatewayTrace(trace_id=str(request.get("trace_id") or new_id("gw_trace")))
         messages = extract_messages(request)
         turn_id = trace.new_turn("chat_completion", {"model": request.get("model"), "message_count": len(messages)})
@@ -77,15 +79,18 @@ class RepoShieldGateway:
             action = lowerer.lower(ins, cwd=self.repo_root)
             if not action:
                 continue
-            # Re-use the control-plane pipeline from the raw action so package/sandbox/sentry evidence stays consistent.
-            action2, decision = cp.guard_action(action.raw_action, source_ids=action.source_ids, tool=action.tool, operation=action.metadata.get("operation"), file_path=action.affected_assets[0] if action.tool.lower() in {"read", "write", "edit", "delete"} and action.affected_assets else None)
-            action2.metadata.update(action.metadata)
+            action2, decision = cp.guard_action_ir(action)
             runtime = self.policy_runtime.apply(decision)
             item = {"instruction": instruction_to_dict(ins), "action": asdict(action2), "decision": asdict(decision), "runtime": runtime.to_dict()}
             if runtime.effective_decision in {"block", "quarantine", "sandbox_then_approval"}:
-                confirm = confirmations.create(trace.trace_id, asdict(action2), plan={"instructions": [instruction_to_dict(i) for i in instructions]})
-                item["confirmation_request"] = asdict(confirm)
-                cp.audit.append("gateway_confirmation_request", asdict(confirm), task_id=cp.contract.task_id if cp.contract else None, actor="gateway", source_ids=action2.source_ids, action_id=action2.action_id)
+                assert cp.contract is not None
+                plan = {"trace_id": trace.trace_id, "instructions": [instruction_to_dict(i) for i in instructions]}
+                approval = self.approvals.create_request(cp.contract, action2, decision, cp.provenance.graph, plan=plan)
+                self.approval_store.append_request(approval)
+                approval_payload = asdict(approval)
+                item["approval_request"] = approval_payload
+                item["confirmation_request"] = approval_payload
+                cp.audit.append("gateway_approval_request", approval_payload, task_id=cp.contract.task_id if cp.contract else None, actor="gateway", source_ids=action2.source_ids, action_id=action2.action_id)
             cp.audit.append("policy_runtime", runtime.to_dict(), task_id=cp.contract.task_id if cp.contract else None, actor="policy_runtime", source_ids=action2.source_ids, action_id=action2.action_id, decision_id=decision.decision_id)
             guarded.append(item)
 
@@ -210,7 +215,15 @@ def serve_gateway(
                 self.end_headers()
                 self.wfile.write(data)
             except Exception as exc:  # pragma: no cover - demo server only
-                data = json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8")
+                gateway.cp.audit.append(
+                    "gateway_error",
+                    {"path": self.path, "error_type": type(exc).__name__, "detail": str(exc)},
+                    actor="gateway",
+                )
+                data = json.dumps(
+                    {"error": {"type": "upstream_error", "message": "upstream request failed"}},
+                    ensure_ascii=False,
+                ).encode("utf-8")
                 self.send_response(500)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Content-Length", str(len(data)))

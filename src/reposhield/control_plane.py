@@ -73,8 +73,19 @@ class RepoShieldControlPlane:
     ) -> tuple[ActionIR, PolicyDecision]:
         if self.contract is None:
             self.build_contract("general code maintenance task")
-        assert self.contract is not None
         action = self.parser.parse(raw_action, tool=tool, cwd=self.repo_root, source_ids=source_ids or [], operation=operation, file_path=file_path)
+        return self.guard_action_ir(action, run_preflight=run_preflight)
+
+    def guard_action_ir(
+        self,
+        action: ActionIR,
+        *,
+        run_preflight: bool = True,
+    ) -> tuple[ActionIR, PolicyDecision]:
+        """Govern an already-lowered ActionIR without reparsing raw tool input."""
+        if self.contract is None:
+            self.build_contract("general code maintenance task")
+        assert self.contract is not None
         for sid in action.source_ids:
             self.provenance.influence(sid, action.action_id)
         self.audit.append("action_parsed", asdict(action), task_id=self.contract.task_id, actor="action_parser", source_ids=action.source_ids, action_id=action.action_id)

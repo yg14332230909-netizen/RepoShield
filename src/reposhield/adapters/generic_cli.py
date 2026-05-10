@@ -5,6 +5,7 @@ allowed by RepoShield are applied; dangerous actions are never passed through.
 """
 from __future__ import annotations
 
+import json
 import subprocess
 import tempfile
 from dataclasses import asdict
@@ -28,6 +29,7 @@ class GenericCLIAdapter:
         *,
         allow_command_collection: bool = False,
         command_collection_mode: str = "refuse",
+        strict_transcript: bool = True,
     ):
         self.repo_root = Path(repo_root).resolve()
         self.cp = control_plane
@@ -36,6 +38,7 @@ class GenericCLIAdapter:
         self.command = command
         self.allow_command_collection = allow_command_collection
         self.command_collection_mode = command_collection_mode
+        self.strict_transcript = strict_transcript
 
     def collect_plan(self) -> list[AgentToolCall]:
         text = ""
@@ -63,7 +66,8 @@ class GenericCLIAdapter:
             text = proc.stdout + "\n" + proc.stderr
         else:
             text = "EDIT: src/login.js\nRS_ACTION: npm test\n"
-        calls = parse_reposhield_action_lines(text)
+        self._ingest_transcript_sources(text)
+        calls = parse_reposhield_action_lines(text, strict=self.strict_transcript)
         self.cp.audit.append("adapter_plan_collected", {"adapter": self.name, "calls": [asdict(c) for c in calls]}, task_id=self.cp.contract.task_id if self.cp.contract else None, actor="generic_cli_adapter")
         return calls
 
@@ -102,3 +106,31 @@ class GenericCLIAdapter:
                 "}\n\nmodule.exports = { bindLogin };\n",
                 encoding="utf-8",
             )
+
+    def _ingest_transcript_sources(self, text: str) -> None:
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if line.startswith("{"):
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if payload.get("type") == "source":
+                    self.cp.ingest_source(
+                        str(payload.get("source_type") or payload.get("type_name") or "external_text"),
+                        str(payload.get("content") or ""),
+                        retrieval_path=str(payload.get("retrieval_path") or "transcript"),
+                        source_id=str(payload.get("source_id") or ""),
+                    )
+                continue
+            if not line.upper().startswith("SOURCE:"):
+                continue
+            rest = line.split(":", 1)[1].strip()
+            meta, sep, content = rest.partition("|")
+            parts = meta.split()
+            if not parts:
+                continue
+            source_id = parts[0]
+            source_type = parts[1] if len(parts) > 1 else "external_text"
+            retrieval_path = parts[2] if len(parts) > 2 else "transcript"
+            self.cp.ingest_source(source_type, content.strip() if sep else "", retrieval_path=retrieval_path, source_id=source_id)

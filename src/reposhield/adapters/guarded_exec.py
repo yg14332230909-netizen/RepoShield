@@ -7,6 +7,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from ..control_plane import RepoShieldControlPlane
+from ..gateway.openai_compat import _redact_secret_text
+from ..models import sha256_text
 
 
 @dataclass(slots=True)
@@ -48,11 +50,36 @@ class GuardedExecAdapter:
         )
 
         if decision.decision == "allow":
+            self.cp.audit.append(
+                "host_exec_started",
+                {"command": raw_action},
+                task_id=self.cp.contract.task_id if self.cp.contract else None,
+                actor="guarded_exec_adapter",
+                source_ids=action.source_ids,
+                action_id=action.action_id,
+                decision_id=decision.decision_id,
+            )
             proc = subprocess.run(command, cwd=self.repo_root, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
             result.executed = True
             result.exit_code = proc.returncode
             result.stdout = proc.stdout
             result.stderr = proc.stderr
+            self.cp.audit.append(
+                "host_exec_completed",
+                {
+                    "command": raw_action,
+                    "exit_code": proc.returncode,
+                    "stdout_hash": sha256_text(proc.stdout or ""),
+                    "stderr_hash": sha256_text(proc.stderr or ""),
+                    "stdout_truncated_redacted": _redact_secret_text(proc.stdout)[:1200],
+                    "stderr_truncated_redacted": _redact_secret_text(proc.stderr)[:1200],
+                },
+                task_id=self.cp.contract.task_id if self.cp.contract else None,
+                actor="guarded_exec_adapter",
+                source_ids=action.source_ids,
+                action_id=action.action_id,
+                decision_id=decision.decision_id,
+            )
             return result
 
         if decision.decision == "allow_in_sandbox":
@@ -69,4 +96,3 @@ class GuardedExecAdapter:
 
         result.notes.append("blocked: command was not executed")
         return result
-

@@ -3,22 +3,30 @@ from __future__ import annotations
 
 from typing import Any
 
-from .tool_parser import GenericJSONToolParser, ToolParser, ToolParseResult
+from .tool_parser import (
+    AiderToolParser,
+    AnthropicToolUseParser,
+    ClineToolParser,
+    GenericJSONToolParser,
+    OpenAIToolParser,
+    OpenHandsToolParser,
+    ToolParser,
+    ToolParseResult,
+)
 
 
 class ToolParserRegistry:
     def __init__(self) -> None:
-        generic = GenericJSONToolParser()
         self._parsers: dict[str, ToolParser] = {
-            "generic_json": generic,
-            "openai": generic,
-            "codex": generic,
-            "cline": generic,
-            "cline_like": generic,
-            "claude_code": generic,
-            "anthropic": generic,
-            "aider": generic,
-            "openhands": generic,
+            "generic_json": GenericJSONToolParser(),
+            "openai": OpenAIToolParser(),
+            "codex": OpenAIToolParser(),
+            "cline": ClineToolParser(),
+            "cline_like": ClineToolParser(),
+            "claude_code": AnthropicToolUseParser(),
+            "anthropic": AnthropicToolUseParser(),
+            "aider": AiderToolParser(),
+            "openhands": OpenHandsToolParser(),
         }
         self.default_agent = "generic_json"
 

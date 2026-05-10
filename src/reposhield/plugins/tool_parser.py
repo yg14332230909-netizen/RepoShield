@@ -98,3 +98,38 @@ class GenericJSONToolParser:
 
         raw = str(args.get("command") or args.get("cmd") or args.get("raw") or f"{name} {joined_args}".strip())
         return ToolParseResult(name, "unknown_side_effect", "UNKNOWN", "UNKNOWN.SideEffect", raw, "Bash", default_risk=TOOL_RISK_HINTS["unknown_side_effect"], parser_confidence=0.35, metadata={"args": args, "fallback": True})
+
+
+class OpenAIToolParser(GenericJSONToolParser):
+    """Parser for OpenAI-compatible `tool_calls[].function` records."""
+
+
+class AnthropicToolUseParser(GenericJSONToolParser):
+    """Parser for Anthropic `tool_use` content blocks."""
+
+    def parse(self, tool_call: dict[str, Any]) -> ToolParseResult:
+        if tool_call.get("type") == "tool_use":
+            tool_call = {"name": tool_call.get("name"), "input": tool_call.get("input") or {}}
+        return super().parse(tool_call)
+
+
+class ClineToolParser(GenericJSONToolParser):
+    """Parser for Cline-like tool schemas."""
+
+    def parse(self, tool_call: dict[str, Any]) -> ToolParseResult:
+        if "toolName" in tool_call or "toolInput" in tool_call:
+            tool_call = {"name": tool_call.get("toolName"), "input": tool_call.get("toolInput") or {}}
+        return super().parse(tool_call)
+
+
+class OpenHandsToolParser(GenericJSONToolParser):
+    """Parser for OpenHands action records."""
+
+    def parse(self, tool_call: dict[str, Any]) -> ToolParseResult:
+        if "action" in tool_call and "arguments" not in tool_call:
+            tool_call = {"name": tool_call.get("action"), "arguments": tool_call.get("args") or tool_call.get("input") or {}}
+        return super().parse(tool_call)
+
+
+class AiderToolParser(GenericJSONToolParser):
+    """Parser for aider transcript-derived JSON action records."""

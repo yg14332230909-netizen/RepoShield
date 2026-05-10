@@ -141,6 +141,10 @@ def test_gateway_uses_injected_openai_compatible_upstream_and_blocks(tmp_path: P
     )
     assert result["guarded_results"][0]["action"]["semantic_action"] == "install_git_dependency"
     assert result["guarded_results"][0]["runtime"]["effective_decision"] == "block"
+    assert "instruction_id" in result["guarded_results"][0]["action"]["metadata"]
+    assert "approval_request" in result["guarded_results"][0]
+    events = (repo / ".reposhield" / "gateway_approvals.jsonl").read_text(encoding="utf-8")
+    assert "request" in events
 
 
 def test_chat_completion_stream_events_emit_sse_done(tmp_path: Path):
@@ -159,6 +163,29 @@ def test_chat_completion_stream_events_emit_sse_done(tmp_path: Path):
     assert events[-1] == b"data: [DONE]\n\n"
     joined = b"".join(events).decode("utf-8")
     assert "chat.completion.chunk" in joined
+
+
+def test_chat_completion_stream_events_emit_indexed_tool_call_chunks():
+    events = chat_completion_stream_events(
+        {
+            "id": "chatcmpl_test",
+            "model": "reposhield/local",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "",
+                        "tool_calls": [
+                            {"id": "call_1", "type": "function", "function": {"name": "bash_exec", "arguments": '{"command":"npm test"}'}}
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ],
+        }
+    )
+    joined = b"".join(events).decode("utf-8")
+    assert '"index": 0' in joined
 
 
 def test_gateway_resets_contract_and_context_graph_per_request(tmp_path: Path):
@@ -301,6 +328,8 @@ def test_tool_parser_registry_understands_common_agent_aliases():
     parsed = registry.parse({"type": "tool_use", "name": "Bash", "input": {"command": "npm test"}}, agent_type="claude_code")
     assert parsed.canonical_tool == "bash_exec"
     assert parsed.raw_action == "npm test"
+    cline = registry.parse({"toolName": "read_file", "toolInput": {"path": "README.md"}}, agent_type="cline")
+    assert cline.canonical_tool == "read_file"
 
 
 def test_taint_registry_inherits_untrusted_file_write():

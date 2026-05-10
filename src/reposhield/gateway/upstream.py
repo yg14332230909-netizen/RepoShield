@@ -31,6 +31,8 @@ class OpenAICompatibleUpstream:
         timeout: float = 60.0,
         organization: str | None = None,
         project: str | None = None,
+        max_sse_bytes: int = 2_000_000,
+        max_sse_events: int = 1_000,
     ) -> None:
         self.base_url = (base_url or os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/") + "/"
         self.api_key = api_key if api_key is not None else os.getenv("OPENAI_API_KEY")
@@ -38,6 +40,8 @@ class OpenAICompatibleUpstream:
         self.timeout = timeout
         self.organization = organization or os.getenv("OPENAI_ORG_ID")
         self.project = project or os.getenv("OPENAI_PROJECT_ID")
+        self.max_sse_bytes = max_sse_bytes
+        self.max_sse_events = max_sse_events
 
     def complete(self, request: dict[str, Any], contexts: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         payload = self._chat_payload(request, contexts=contexts)
@@ -126,24 +130,30 @@ class OpenAICompatibleUpstream:
         if self.project:
             headers["OpenAI-Project"] = self.project
         req = Request(url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), headers=headers, method="POST")
+        chunks: list[dict[str, Any]] = []
+        bytes_seen = 0
         try:
             with urlopen(req, timeout=self.timeout) as resp:
-                body = resp.read().decode("utf-8")
+                for raw_line in resp:
+                    bytes_seen += len(raw_line)
+                    if bytes_seen > self.max_sse_bytes:
+                        raise RuntimeError("upstream SSE exceeded size limit")
+                    line = raw_line.decode("utf-8", errors="replace").strip()
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        break
+                    if not data:
+                        continue
+                    chunks.append(json.loads(data))
+                    if len(chunks) > self.max_sse_events:
+                        raise RuntimeError("upstream SSE exceeded event limit")
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"upstream HTTP {exc.code}: {detail}") from exc
         except URLError as exc:
             raise RuntimeError(f"upstream request failed: {exc.reason}") from exc
-        chunks: list[dict[str, Any]] = []
-        for line in body.splitlines():
-            line = line.strip()
-            if not line.startswith("data:"):
-                continue
-            data = line[5:].strip()
-            if data == "[DONE]":
-                break
-            if data:
-                chunks.append(json.loads(data))
         return chunks
 
     @staticmethod
