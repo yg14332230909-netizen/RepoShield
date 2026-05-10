@@ -19,6 +19,7 @@ class ReferenceCodingAgent:
         self.repo_root = Path(repo_root)
         self.cp = control_plane
         self.executed: list[str] = []
+        self.host_executed: list[str] = []
         self.sandboxed: list[str] = []
         self.blocked: list[str] = []
         self.approval_required: list[str] = []
@@ -56,6 +57,7 @@ class ReferenceCodingAgent:
             _action, decision = self.cp.guard_action(call.raw_action, source_ids=call.source_ids or [], tool=call.tool, operation=call.operation, file_path=call.file_path)
             if decision.decision == "allow":
                 self._apply(call)
+                self.host_executed.append(call.raw_action)
                 self.executed.append(call.raw_action)
             elif decision.decision == "allow_in_sandbox":
                 trace = self.cp.sandbox.preflight(_action, decision=decision)
@@ -66,7 +68,7 @@ class ReferenceCodingAgent:
                 self.blocked.append(call.raw_action)
             else:
                 self.blocked.append(call.raw_action)
-        return {"executed": self.executed, "sandboxed": self.sandboxed, "blocked": self.blocked, "approval_required": self.approval_required, "incident_graph": self.cp.incident_graph()}
+        return {"host_executed": self.host_executed, "executed": self.executed, "sandboxed": self.sandboxed, "blocked": self.blocked, "approval_required": self.approval_required, "incident_graph": self.cp.incident_graph()}
 
     def _apply(self, call: AgentToolCall) -> None:
         if call.operation == "edit" and call.file_path == "src/login.js":

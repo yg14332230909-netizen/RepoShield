@@ -75,3 +75,25 @@ def test_parser_flags_destructive_cross_platform_command(tmp_path):
     assert action.semantic_action == "unknown_side_effect"
     assert action.risk == "critical"
     assert "destructive_file_operation" in action.risk_tags
+
+
+def test_parser_fail_closes_compound_command_with_destructive_part(tmp_path):
+    action = ActionParser().parse("npm test && rm -rf .", cwd=tmp_path)
+    assert action.risk == "critical"
+    assert "compound_contains_dangerous_part" in action.risk_tags
+    assert action.metadata["compound_children"] == ["run_tests", "unknown_side_effect"]
+
+
+def test_parser_canonicalizes_secret_path_traversal(tmp_path):
+    repo = make_repo(tmp_path)
+    action = ActionParser().parse("src/../.env", tool="Edit", operation="edit", file_path="src/../.env", cwd=repo)
+    assert action.semantic_action == "read_secret_file"
+    assert action.affected_assets == [".env"]
+
+
+def test_parser_blocks_file_path_escape(tmp_path):
+    repo = make_repo(tmp_path)
+    action = ActionParser().parse("../../.ssh/id_rsa", tool="Read", operation="read", file_path="../../.ssh/id_rsa", cwd=repo)
+    assert action.semantic_action == "unknown_side_effect"
+    assert action.risk == "critical"
+    assert "path_escape_repo_root" in action.risk_tags

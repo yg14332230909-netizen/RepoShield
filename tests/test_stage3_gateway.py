@@ -187,6 +187,15 @@ def test_gateway_does_not_release_allow_in_sandbox_tool_calls(tmp_path: Path):
     assert "sandbox-only" in message["content"]
 
 
+def test_gateway_plus_guarded_tools_can_release_allow_in_sandbox_tool_calls(tmp_path: Path):
+    repo = make_repo(tmp_path)
+    gw = RepoShieldGateway(repo, audit_path=tmp_path / "audit.jsonl", release_mode="gateway_plus_guarded_tools")
+    result = gw.handle_chat_completion({"model": "reposhield/local-heuristic", "messages": [{"role": "user", "content": "fix login and run tests"}]})
+    assert any(g["runtime"]["effective_decision"] == "allow_in_sandbox" for g in result["guarded_results"])
+    message = result["response"]["choices"][0]["message"]
+    assert message.get("tool_calls")
+
+
 def test_gateway_block_message_redacts_secrets(tmp_path: Path):
     repo = make_repo(tmp_path)
     result = simulate_gateway_request(

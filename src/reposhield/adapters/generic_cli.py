@@ -17,18 +17,39 @@ from .protocol import AdapterRunResult, parse_reposhield_action_lines
 class GenericCLIAdapter:
     name = "generic_cli"
 
-    def __init__(self, repo_root: str | Path, control_plane: RepoShieldControlPlane, task: str, transcript: str | Path | None = None, command: list[str] | None = None):
+    def __init__(
+        self,
+        repo_root: str | Path,
+        control_plane: RepoShieldControlPlane,
+        task: str,
+        transcript: str | Path | None = None,
+        command: list[str] | None = None,
+        *,
+        allow_command_collection: bool = False,
+    ):
         self.repo_root = Path(repo_root).resolve()
         self.cp = control_plane
         self.task = task
         self.transcript = Path(transcript) if transcript else None
         self.command = command
+        self.allow_command_collection = allow_command_collection
 
     def collect_plan(self) -> list[AgentToolCall]:
         text = ""
         if self.transcript:
             text = self.transcript.read_text(encoding="utf-8")
         elif self.command:
+            if not self.allow_command_collection:
+                raise RuntimeError(
+                    "Refusing to execute external agent command before RepoShield governance. "
+                    "Use transcript mode, gateway mode, exec-guard/file-guard, or a PATH shim."
+                )
+            self.cp.audit.append(
+                "unsafe_adapter_command_collection",
+                {"adapter": self.name, "command": self.command, "warning": "external command collection was explicitly allowed"},
+                task_id=self.cp.contract.task_id if self.cp.contract else None,
+                actor="generic_cli_adapter",
+            )
             proc = subprocess.run(self.command, cwd=self.repo_root, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
             text = proc.stdout + "\n" + proc.stderr
         else:
@@ -46,11 +67,14 @@ class GenericCLIAdapter:
             result.events.append({"raw_action": call.raw_action, "decision": asdict(decision)})
             if decision.decision == "allow":
                 self.apply_allowed_action(call)
+                result.allowed.append(call.raw_action)
+                result.host_executed.append(call.raw_action)
                 result.executed.append(call.raw_action)
             elif decision.decision == "allow_in_sandbox":
                 trace = self.cp.sandbox.preflight(_action, decision=decision)
                 self.cp.audit.append("exec_trace", asdict(trace), task_id=self.cp.contract.task_id if self.cp.contract else None, actor="generic_cli_adapter", action_id=_action.action_id)
                 result.sandboxed.append(call.raw_action)
+                result.simulated.append(call.raw_action)
             elif decision.decision == "sandbox_then_approval":
                 result.approval_required.append(call.raw_action)
             else:

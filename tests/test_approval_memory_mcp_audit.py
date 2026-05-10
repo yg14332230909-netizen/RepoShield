@@ -24,6 +24,19 @@ def test_approval_hash_mismatch_is_blocked(tmp_path):
     assert reason == "action_hash_mismatch"
 
 
+def test_approval_action_hash_is_stable_across_parse_ids(tmp_path):
+    contract = TaskContractBuilder().build("install eslint and run lint")
+    center = ApprovalCenter()
+    prov = ContextProvenance()
+    fake_decision = type("D", (), {"decision": "sandbox_then_approval"})()
+    first = ActionParser().parse("npm install eslint")
+    second = ActionParser().parse("npm install eslint")
+    req = center.create_request(contract, first, fake_decision, prov.graph, plan={"task_id": contract.task_id, "goal": contract.goal})
+    grant = center.grant(req)
+    ok, reason = center.validate(grant, second, plan={"task_id": contract.task_id, "goal": contract.goal}, contract=contract)
+    assert ok, reason
+
+
 def test_approval_store_persists_and_finds_valid_grant(tmp_path):
     contract = TaskContractBuilder().build("install eslint and run lint")
     action = ActionParser().parse("npm install eslint")

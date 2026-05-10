@@ -40,6 +40,7 @@ class RepoShieldControlPlane:
     def reset_task_context(self) -> None:
         """Start a fresh per-request task context while keeping shared repo services."""
         self.provenance = ContextProvenance()
+        self.sentry = SecretSentry(self.asset_graph)
         self.contract = None
 
     def ingest_source(self, source_type: str, content: str, retrieval_path: str = "", source_id: str | None = None) -> SourceRecord:
@@ -92,6 +93,8 @@ class RepoShieldControlPlane:
             decision = self.policy.decide(self.contract, action, self.asset_graph, self.provenance.graph, package_event=package_event, secret_event=secret_event, exec_trace=trace)
 
         decision = self.policy_overrides.apply(action, decision)
+        for event in self.policy_overrides.consume_events():
+            self.audit.append("policy_override_event", event, task_id=self.contract.task_id, actor="policy_config", action_id=action.action_id, decision_id=decision.decision_id)
 
         self.audit.append("policy_decision", asdict(decision), task_id=self.contract.task_id, actor="policy_engine", source_ids=action.source_ids, action_id=action.action_id, decision_id=decision.decision_id)
         return action, decision

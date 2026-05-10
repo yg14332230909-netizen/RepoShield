@@ -6,7 +6,10 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from .models import ActionIR, PolicyDecision
+from .models import ActionIR, Decision, PolicyDecision
+
+VALID_DECISIONS: set[str] = {"allow", "allow_in_sandbox", "sandbox_then_approval", "block", "quarantine"}
+DECISION_RANK = {"allow": 0, "allow_in_sandbox": 1, "sandbox_then_approval": 2, "block": 3, "quarantine": 4}
 
 
 class ConfigurablePolicyOverrides:
@@ -22,6 +25,7 @@ class ConfigurablePolicyOverrides:
 
     def __init__(self, rules: list[dict[str, Any]] | None = None):
         self.rules = rules or []
+        self._events: list[dict[str, Any]] = []
 
     @classmethod
     def from_file(cls, path: str | Path | None) -> "ConfigurablePolicyOverrides":
@@ -42,11 +46,24 @@ class ConfigurablePolicyOverrides:
         return cls(list((data or {}).get("rules", [])))
 
     def apply(self, action: ActionIR, decision: PolicyDecision) -> PolicyDecision:
+        self._events = []
         for rule in self.rules:
             if not self._matches(rule.get("match", {}), action, decision):
                 continue
             new_decision = str(rule.get("decision") or decision.decision)
             reason = str(rule.get("reason") or rule.get("name") or "configured_policy_override")
+            if new_decision not in VALID_DECISIONS:
+                self._events.append({"event": "invalid_policy_override_decision", "rule": rule.get("name"), "requested_decision": new_decision, "kept_decision": decision.decision})
+                return replace(
+                    decision,
+                    reason_codes=list(dict.fromkeys([*decision.reason_codes, "invalid_policy_override_decision"])),
+                )
+            if self._is_unsafe_downgrade(decision.decision, new_decision) and not bool(rule.get("unsafe_override")):
+                self._events.append({"event": "unsafe_policy_downgrade_rejected", "rule": rule.get("name"), "from": decision.decision, "to": new_decision})
+                return replace(
+                    decision,
+                    reason_codes=list(dict.fromkeys([*decision.reason_codes, "unsafe_policy_downgrade_rejected", reason])),
+                )
             risk_score = int(rule.get("risk_score") or decision.risk_score)
             controls = list(rule.get("required_controls") or decision.required_controls)
             return replace(
@@ -58,6 +75,19 @@ class ConfigurablePolicyOverrides:
                 explanation=str(rule.get("explanation") or decision.explanation),
             )
         return decision
+
+    def consume_events(self) -> list[dict[str, Any]]:
+        events = self._events
+        self._events = []
+        return events
+
+    @staticmethod
+    def _is_unsafe_downgrade(current: Decision, requested: str) -> bool:
+        if current in {"block", "quarantine", "sandbox_then_approval"}:
+            return DECISION_RANK[requested] < DECISION_RANK[current]
+        if current == "allow_in_sandbox" and requested == "allow":
+            return True
+        return False
 
     @staticmethod
     def _matches(match: dict[str, Any], action: ActionIR, decision: PolicyDecision) -> bool:
@@ -75,4 +105,3 @@ class ConfigurablePolicyOverrides:
         if tag and tag not in action.risk_tags:
             return False
         return True
-

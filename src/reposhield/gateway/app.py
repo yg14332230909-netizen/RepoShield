@@ -30,6 +30,7 @@ class RepoShieldGateway:
         upstream: Any | None = None,
         agent_type: str = "openai",
         policy_config: str | Path | None = None,
+        release_mode: str = "gateway_only",
     ) -> None:
         self.repo_root = Path(repo_root).resolve()
         self.cp = RepoShieldControlPlane(self.repo_root, audit_path=audit_path or self.repo_root / ".reposhield" / "gateway_audit.jsonl", policy_config=policy_config)
@@ -39,6 +40,7 @@ class RepoShieldGateway:
         self.registry = ToolParserRegistry()
         self.lowerer = InstructionLowerer(self.cp.parser)
         self.confirmations = GatewayConfirmationFlow()
+        self.release_mode = release_mode
 
     def handle_chat_completion(self, request: dict[str, Any]) -> dict[str, Any]:
         trace = GatewayTrace(trace_id=str(request.get("trace_id") or new_id("gw_trace")))
@@ -80,7 +82,7 @@ class RepoShieldGateway:
             self.cp.audit.append("policy_runtime", runtime.to_dict(), task_id=self.cp.contract.task_id if self.cp.contract else None, actor="policy_runtime", source_ids=action2.source_ids, action_id=action2.action_id, decision_id=decision.decision_id)
             guarded.append(item)
 
-        response = transform_response(assistant_msg, guarded, trace.trace_id, model=str(request.get("model") or "reposhield/local"))
+        response = transform_response(assistant_msg, guarded, trace.trace_id, model=str(request.get("model") or "reposhield/local"), release_mode=self.release_mode)
         result = {"trace_id": trace.trace_id, "turn_id": turn_id, "response": response, "instructions": [instruction_to_dict(i) for i in instructions], "guarded_results": guarded, "audit_log": str(self.cp.audit.log_path)}
         self.cp.audit.append("gateway_response", {"trace_id": trace.trace_id, "turn_id": turn_id, "blocked_count": sum(1 for g in guarded if g.get("runtime", {}).get("effective_decision") in {"block", "quarantine", "sandbox_then_approval"}), "response_hash": sha256_json(response)}, task_id=self.cp.contract.task_id if self.cp.contract else None, actor="gateway")
         return result
@@ -134,6 +136,7 @@ def serve_gateway(
     upstream_timeout: float = 60.0,
     policy_config: str | Path | None = None,
     gateway_api_key: str | None = None,
+    release_mode: str = "gateway_only",
 ) -> None:
     """Start a tiny standard-library OpenAI-compatible HTTP server.
 
@@ -148,6 +151,7 @@ def serve_gateway(
         audit_path=audit_path,
         policy_mode=policy_mode,
         policy_config=policy_config,
+        release_mode=release_mode,
         upstream=make_upstream(
             upstream_base_url=upstream_base_url,
             upstream_api_key=upstream_api_key,
@@ -155,7 +159,10 @@ def serve_gateway(
             upstream_timeout=upstream_timeout,
         ),
     )
-    required_gateway_key = gateway_api_key if gateway_api_key is not None else os.getenv("REPOSHIELD_GATEWAY_API_KEY")
+    required_gateway_key = gateway_api_key if gateway_api_key is not None else os.getenv("REPOSHIELD_GATEWAY_API_KEY", "reposhield-local")
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        gateway.cp.audit.append("gateway_network_exposure_warning", {"host": host, "requires_authorization": True}, actor="gateway")
+        print("RepoShield warning: gateway is listening on a non-loopback host; Authorization is required.", flush=True)
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802 - http.server API
@@ -165,6 +172,7 @@ def serve_gateway(
                 self.wfile.write(b"not found")
                 return
             if required_gateway_key and self.headers.get("Authorization") != f"Bearer {required_gateway_key}":
+                gateway.cp.audit.append("rejected_gateway_request", {"path": self.path, "reason": "missing_or_invalid_authorization"}, actor="gateway")
                 self.send_response(401)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()

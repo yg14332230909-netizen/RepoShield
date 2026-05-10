@@ -58,14 +58,17 @@ class ActionParser:
                 action.metadata.update({"inner_action": wrapped, "wrapper": "shell"})
                 return action
 
+            if len(command_parts) > 1:
+                return self._aggregate_compound(raw, tool, cwd, source_ids, command_parts, _depth)
+
         if tool_norm == "mcp":
             capability = "deploy" if re.search(r"deploy|publish|delete|remove|destroy", raw, re.I) else "write" if re.search(r"create|update|write", raw, re.I) else "read"
             return self.parse_mcp_call("mcp_adapter", raw, capability, {"raw_action": raw}, source_ids=source_ids)
 
         if operation or tool_norm in {"read", "write", "edit", "delete"}:
             path = file_path or raw
-            semantic, risk, side_effect, tags, requires = self._parse_file_op(operation or tool_norm, path)
-            return ActionIR(action_id, raw, tool, cwd_s, semantic, risk, tags, [path], requires, source_ids, 0.95, side_effect, command_parts)
+            semantic, risk, side_effect, tags, requires, affected, metadata = self._parse_file_op(operation or tool_norm, path, cwd)
+            return ActionIR(action_id, raw, tool, cwd_s, semantic, risk, tags, affected, requires, source_ids, 0.95, side_effect, command_parts, metadata=metadata)
 
         if re.search(r"\.github/workflows/", raw, re.I) and re.search(r">|tee|sed\s+-i|python|node|cat|echo", raw, re.I):
             return ActionIR(
@@ -162,20 +165,78 @@ class ActionParser:
             source_ids or [], 0.95, capability not in {"read"}, metadata={"mcp_args": args},
         )
 
-    def _parse_file_op(self, op: str, path: str) -> tuple[str, Risk, bool, list[str], list[str]]:
+    def _parse_file_op(self, op: str, path: str, cwd: str | Path = ".") -> tuple[str, Risk, bool, list[str], list[str], list[str], dict[str, str]]:
         op = op.lower()
         norm = path.replace("\\", "/")
-        if SECRET_PATH_RE.search(norm):
-            return "read_secret_file", "critical", False, ["secret_access"], ["block"]
-        if CI_PATH_RE.search(norm):
+        repo = Path(cwd).resolve()
+        resolved = (repo / path).resolve(strict=False) if not Path(path).is_absolute() else Path(path).resolve(strict=False)
+        metadata = {"canonical_path": str(resolved)}
+        try:
+            rel = resolved.relative_to(repo).as_posix()
+        except ValueError:
+            return "unknown_side_effect", "critical", True, ["path_escape_repo_root"], ["block"], [norm], metadata
+
+        path_obj = repo / rel
+        if path_obj.is_symlink():
+            target = path_obj.resolve(strict=False)
+            metadata["symlink_target"] = str(target)
+            try:
+                target.relative_to(repo)
+            except ValueError:
+                return "unknown_side_effect", "critical", True, ["symlink_escape_repo_root"], ["block"], [rel], metadata
+
+        canonical_norm = rel.replace("\\", "/")
+        basename = Path(canonical_norm).name.lower()
+        hidden_sensitive = canonical_norm.startswith(".") and basename in {".env", ".npmrc", ".pypirc"}
+        if SECRET_PATH_RE.search(norm) or SECRET_PATH_RE.search(canonical_norm) or hidden_sensitive:
+            return "read_secret_file", "critical", False, ["secret_access"], ["block"], [canonical_norm], metadata
+        if CI_PATH_RE.search(canonical_norm):
             if op in {"write", "edit", "delete"}:
-                return "modify_ci_pipeline", "high", True, ["ci_cd"], ["human_approval", "ci_dry_run"]
-            return "read_project_file", "low", False, ["ci_cd", "file_read"], []
+                return "modify_ci_pipeline", "high", True, ["ci_cd"], ["human_approval", "ci_dry_run"], [canonical_norm], metadata
+            return "read_project_file", "low", False, ["ci_cd", "file_read"], [], [canonical_norm], metadata
         if op in {"write", "edit"}:
-            return "edit_source_file", "medium", True, ["file_write"], ["record_diff"]
+            return "edit_source_file", "medium", True, ["file_write"], ["record_diff"], [canonical_norm], metadata
         if op == "delete":
-            return "unknown_side_effect", "high", True, ["delete_file"], ["sandbox_then_approval"]
-        return "read_project_file", "low", False, ["file_read"], []
+            return "unknown_side_effect", "high", True, ["delete_file"], ["sandbox_then_approval"], [canonical_norm], metadata
+        return "read_project_file", "low", False, ["file_read"], [], [canonical_norm], metadata
+
+    def _aggregate_compound(self, raw: str, tool: str, cwd: str | Path, source_ids: list[str], command_parts: list[str], _depth: int) -> ActionIR:
+        children = [self.parse(part, tool=tool, cwd=cwd, source_ids=source_ids, _depth=_depth + 1) for part in command_parts]
+        risk_order = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+        worst = max(children, key=lambda a: risk_order[a.risk])
+        dangerous = [
+            child for child in children
+            if child.semantic_action not in {"read_project_file", "run_tests"} or child.risk in {"high", "critical"}
+        ]
+        semantic = worst.semantic_action if dangerous else "run_tests" if any(c.semantic_action == "run_tests" for c in children) else worst.semantic_action
+        risk: Risk = worst.risk
+        side_effect = any(c.side_effect for c in children)
+        tags: list[str] = ["compound_command"]
+        affected: list[str] = []
+        requires: list[str] = []
+        for child in children:
+            tags.extend(child.risk_tags)
+            affected.extend(child.affected_assets)
+            requires.extend(child.requires)
+        if dangerous:
+            tags.append("compound_contains_dangerous_part")
+            requires.append("sandbox_then_approval")
+        return ActionIR(
+            new_id("act"),
+            raw,
+            tool,
+            str(cwd),
+            semantic,
+            risk,
+            list(dict.fromkeys(tags)),
+            list(dict.fromkeys(affected)),
+            list(dict.fromkeys(requires)),
+            source_ids,
+            min(c.parser_confidence for c in children),
+            side_effect,
+            command_parts,
+            metadata={"compound_children": [c.semantic_action for c in children]},
+        )
 
     def _parse_install(self, raw: str) -> tuple[str, list[str], list[str], Risk, list[str]]:
         targets = self._install_targets(raw)

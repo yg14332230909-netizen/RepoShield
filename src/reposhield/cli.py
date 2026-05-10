@@ -277,6 +277,7 @@ def cmd_gateway_start(args: argparse.Namespace) -> int:
         upstream_timeout=args.upstream_timeout,
         policy_config=args.policy_config,
         gateway_api_key=args.gateway_api_key,
+        release_mode=args.release_mode,
     )
     return 0
 
@@ -416,6 +417,7 @@ def build_parser() -> argparse.ArgumentParser:
     gw_start.add_argument("--upstream-timeout", type=float, default=60.0)
     gw_start.add_argument("--policy-config")
     gw_start.add_argument("--gateway-api-key", help="Require clients to send Authorization: Bearer <key>. Defaults to REPOSHIELD_GATEWAY_API_KEY when set.")
+    gw_start.add_argument("--release-mode", choices=["gateway_only", "gateway_plus_guarded_tools"], default="gateway_only")
     gw_start.set_defaults(func=cmd_gateway_start)
 
     bench = sub.add_parser("bench", help="运行 CodeAgent-SecBench 单个样本")

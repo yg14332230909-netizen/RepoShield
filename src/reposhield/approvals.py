@@ -10,6 +10,22 @@ from typing import Any
 from .models import ActionIR, ApprovalGrant, ApprovalRequest, ContextGraph, ExecTrace, PolicyDecision, TaskContract, new_id, sha256_json
 
 
+def stable_action_hash(action: ActionIR, task_id: str | None = None) -> str:
+    """Hash logical action identity without volatile parse ids."""
+    return sha256_json(
+        {
+            "task_id": task_id,
+            "raw_action_normalized": " ".join(action.raw_action.split()),
+            "tool": action.tool.lower(),
+            "semantic_action": action.semantic_action,
+            "affected_assets": sorted(action.affected_assets),
+            "source_ids": sorted(action.source_ids),
+            "operation": action.metadata.get("operation"),
+            "file_path": action.metadata.get("file_path") or (action.affected_assets[0] if action.affected_assets else None),
+        }
+    )
+
+
 class ApprovalCenter:
     def __init__(self) -> None:
         self.created_requests = 0
@@ -27,7 +43,7 @@ class ApprovalCenter:
     ) -> ApprovalRequest:
         self.created_requests += 1
         plan_hash = sha256_json(plan or {"task_id": contract.task_id, "goal": contract.goal})
-        action_hash = sha256_json(asdict(action))
+        action_hash = stable_action_hash(action, contract.task_id)
         source_influence = []
         for sid in action.source_ids:
             src = context_graph.get(sid)
@@ -69,7 +85,7 @@ class ApprovalCenter:
         expires = datetime.fromisoformat(grant.expires_at)
         if now > expires:
             return False, "approval_expired"
-        action_hash = sha256_json(asdict(action))
+        action_hash = stable_action_hash(action, contract.task_id if contract else grant.task_id)
         if action_hash != grant.approved_action_hash:
             return False, "action_hash_mismatch"
         if plan is not None:
@@ -141,13 +157,12 @@ class ApprovalStore:
         return events
 
     def grants_for_action(self, action: ActionIR) -> list[ApprovalGrant]:
-        action_hash = sha256_json(asdict(action))
         grants: list[ApprovalGrant] = []
         for event in self.list_events():
             if event.get("event_type") != "grant":
                 continue
             payload = event.get("payload", {})
-            if payload.get("approved_action_hash") == action_hash:
+            if payload.get("approved_action_hash") == stable_action_hash(action, payload.get("task_id")):
                 grants.append(ApprovalGrant(**payload))
         return grants
 

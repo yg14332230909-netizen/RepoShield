@@ -25,10 +25,13 @@ class AdapterRunResult:
     adapter: str
     repo_root: str
     task: str
+    allowed: list[str] = field(default_factory=list)
+    host_executed: list[str] = field(default_factory=list)
     executed: list[str] = field(default_factory=list)
     sandboxed: list[str] = field(default_factory=list)
     blocked: list[str] = field(default_factory=list)
     approval_required: list[str] = field(default_factory=list)
+    simulated: list[str] = field(default_factory=list)
     events: list[dict] = field(default_factory=list)
     audit_log: str | None = None
 
