@@ -12,9 +12,12 @@ from .action_parser import ActionParser
 from .adapters.aider import AiderAdapter
 from .adapters.generic_cli import GenericCLIAdapter
 from .adapters.guarded_exec import GuardedExecAdapter
+from .agent_init import init_agent
+from .approvals import ApprovalCenter, ApprovalStore
 from .bench import run_sample
 from .bench_suite import generate_stage2_samples, run_suite
 from .control_plane import RepoShieldControlPlane
+from .dashboard import render_dashboard
 from .demo import run_demo
 from .gateway import RepoShieldGateway, make_upstream, serve_gateway, simulate_gateway_request
 from .gateway_bench import generate_stage3_gateway_samples, run_gateway_suite
@@ -35,7 +38,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
 
 def cmd_guard(args: argparse.Namespace) -> int:
-    cp = RepoShieldControlPlane(args.repo, audit_path=args.audit or Path(args.repo) / ".reposhield" / "audit.jsonl")
+    cp = RepoShieldControlPlane(args.repo, audit_path=args.audit or Path(args.repo) / ".reposhield" / "audit.jsonl", policy_config=args.policy_config)
     cp.build_contract(args.task)
     source_ids: list[str] = []
     if args.source_file:
@@ -129,7 +132,7 @@ def cmd_exec_guard(args: argparse.Namespace) -> int:
         command = command[1:]
     if not command:
         raise ValueError("exec-guard requires a command after --")
-    cp = RepoShieldControlPlane(args.repo, audit_path=args.audit or Path(args.repo) / ".reposhield" / "exec_guard_audit.jsonl")
+    cp = RepoShieldControlPlane(args.repo, audit_path=args.audit or Path(args.repo) / ".reposhield" / "exec_guard_audit.jsonl", policy_config=args.policy_config)
     cp.build_contract(args.task)
     source_ids: list[str] = []
     if args.source_file:
@@ -146,6 +149,60 @@ def cmd_exec_guard(args: argparse.Namespace) -> int:
     if decision == "sandbox_then_approval":
         return 3
     return 2
+
+
+def cmd_file_guard(args: argparse.Namespace) -> int:
+    cp = RepoShieldControlPlane(args.repo, audit_path=args.audit or Path(args.repo) / ".reposhield" / "file_guard_audit.jsonl", policy_config=args.policy_config)
+    cp.build_contract(args.task)
+    source_ids: list[str] = []
+    if args.source_file:
+        content = Path(args.source_file).read_text(encoding="utf-8")
+        src = cp.ingest_source(args.source_type, content, retrieval_path=args.source_file, source_id=args.source_id)
+        source_ids.append(src.source_id)
+    action, decision = cp.guard_action(args.path, source_ids=source_ids, tool=args.operation.title(), operation=args.operation, file_path=args.path)
+    _print_json({"action": asdict(action), "decision": asdict(decision), "audit_log": str(cp.audit.log_path)})
+    return 0 if decision.decision in {"allow", "allow_in_sandbox"} else 2
+
+
+def cmd_init_agent(args: argparse.Namespace) -> int:
+    result = init_agent(args.repo, args.reposhield_home or Path.cwd(), agent=args.agent, task=args.task, force=args.force)
+    _print_json(result)
+    return 0
+
+
+def cmd_approvals(args: argparse.Namespace) -> int:
+    store = ApprovalStore(args.store)
+    if args.approval_cmd == "list":
+        _print_json({"events": store.list_events()})
+        return 0
+    if args.approval_cmd == "approve":
+        events = store.list_events()
+        req_event = next((e for e in reversed(events) if e.get("event_type") == "request" and e.get("payload", {}).get("approval_request_id") == args.approval_id), None)
+        if not req_event:
+            raise ValueError(f"approval request not found: {args.approval_id}")
+        from .models import ApprovalRequest
+        req = ApprovalRequest(**req_event["payload"])
+        grant = ApprovalCenter().grant(req, constraints=args.constraint or ["sandbox_only", "no_network"], minutes=args.minutes, granted_by=args.granted_by)
+        store.append_grant(grant)
+        _print_json({"grant": asdict(grant)})
+        return 0
+    if args.approval_cmd == "deny":
+        events = store.list_events()
+        req_event = next((e for e in reversed(events) if e.get("event_type") == "request" and e.get("payload", {}).get("approval_request_id") == args.approval_id), None)
+        if not req_event:
+            raise ValueError(f"approval request not found: {args.approval_id}")
+        from .models import ApprovalRequest
+        req = ApprovalRequest(**req_event["payload"])
+        store.append_denial(req, denied_by=args.denied_by)
+        _print_json({"approval_request_id": args.approval_id, "decision": "denied"})
+        return 0
+    raise ValueError(f"unknown approvals command: {args.approval_cmd}")
+
+
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    out = render_dashboard(args.audit, args.output, approvals_path=args.approvals)
+    _print_json({"dashboard": str(out)})
+    return 0
 
 
 def _make_gateway_demo_repo(workdir: Path) -> Path:
@@ -188,6 +245,7 @@ def cmd_gateway_simulate(args: argparse.Namespace) -> int:
                 upstream_chat_path=args.upstream_chat_path,
                 upstream_timeout=args.upstream_timeout,
             ),
+            policy_config=args.policy_config,
         )
         result = gw.handle_chat_completion(request)
     else:
@@ -207,6 +265,7 @@ def cmd_gateway_start(args: argparse.Namespace) -> int:
         upstream_api_key=args.upstream_api_key,
         upstream_chat_path=args.upstream_chat_path,
         upstream_timeout=args.upstream_timeout,
+        policy_config=args.policy_config,
     )
     return 0
 
@@ -248,6 +307,7 @@ def build_parser() -> argparse.ArgumentParser:
     guard.add_argument("--source-type", default="github_issue_body")
     guard.add_argument("--source-id", default="src_issue_001")
     guard.add_argument("--audit")
+    guard.add_argument("--policy-config")
     guard.set_defaults(func=cmd_guard)
 
     parse = sub.add_parser("parse", help="把 raw action 编译为 ActionIR")
@@ -276,8 +336,45 @@ def build_parser() -> argparse.ArgumentParser:
     exec_guard.add_argument("--source-type", default="github_issue_body")
     exec_guard.add_argument("--source-id", default="src_exec_guard_source")
     exec_guard.add_argument("--audit")
+    exec_guard.add_argument("--policy-config")
     exec_guard.add_argument("command", nargs=argparse.REMAINDER)
     exec_guard.set_defaults(func=cmd_exec_guard)
+
+    file_guard = sub.add_parser("file-guard", help="Guard a real file operation before an agent reads/writes/deletes")
+    file_guard.add_argument("--repo", required=True)
+    file_guard.add_argument("--task", required=True)
+    file_guard.add_argument("--operation", choices=["read", "write", "edit", "delete"], required=True)
+    file_guard.add_argument("--path", required=True)
+    file_guard.add_argument("--source-file")
+    file_guard.add_argument("--source-type", default="github_issue_body")
+    file_guard.add_argument("--source-id", default="src_file_guard_source")
+    file_guard.add_argument("--audit")
+    file_guard.add_argument("--policy-config")
+    file_guard.set_defaults(func=cmd_file_guard)
+
+    init = sub.add_parser("init-agent", help="Generate RepoShield agent integration config, shims, and instructions")
+    init.add_argument("--repo", required=True)
+    init.add_argument("--agent", choices=["generic", "cline", "codex", "openhands"], default="generic")
+    init.add_argument("--task", default="general coding task")
+    init.add_argument("--reposhield-home")
+    init.add_argument("--force", action="store_true")
+    init.set_defaults(func=cmd_init_agent)
+
+    approvals = sub.add_parser("approvals", help="List, approve, or deny persisted approval requests")
+    approvals.add_argument("--store", default=".reposhield/approvals.jsonl")
+    approval_sub = approvals.add_subparsers(dest="approval_cmd", required=True)
+    approval_list = approval_sub.add_parser("list")
+    approval_list.set_defaults(func=cmd_approvals)
+    approval_approve = approval_sub.add_parser("approve")
+    approval_approve.add_argument("approval_id")
+    approval_approve.add_argument("--constraint", action="append")
+    approval_approve.add_argument("--minutes", type=int, default=30)
+    approval_approve.add_argument("--granted-by", default="local_user")
+    approval_approve.set_defaults(func=cmd_approvals)
+    approval_deny = approval_sub.add_parser("deny")
+    approval_deny.add_argument("approval_id")
+    approval_deny.add_argument("--denied-by", default="local_user")
+    approval_deny.set_defaults(func=cmd_approvals)
 
     gw_demo = sub.add_parser("gateway-demo", help="运行 v0.3 OpenAI-compatible Gateway 攻击链 demo")
     gw_demo.add_argument("--workdir")
@@ -293,6 +390,7 @@ def build_parser() -> argparse.ArgumentParser:
     gw_sim.add_argument("--upstream-api-key", help="Upstream API key. Defaults to OPENAI_API_KEY when omitted.")
     gw_sim.add_argument("--upstream-chat-path", default="/chat/completions", help="Path under upstream base URL for chat completions.")
     gw_sim.add_argument("--upstream-timeout", type=float, default=60.0)
+    gw_sim.add_argument("--policy-config")
     gw_sim.set_defaults(func=cmd_gateway_simulate)
 
     gw_start = sub.add_parser("gateway-start", help="启动标准库实现的 /v1/chat/completions 本地网关")
@@ -305,6 +403,7 @@ def build_parser() -> argparse.ArgumentParser:
     gw_start.add_argument("--upstream-api-key", help="Upstream API key. Defaults to OPENAI_API_KEY when omitted.")
     gw_start.add_argument("--upstream-chat-path", default="/chat/completions", help="Path under upstream base URL for chat completions.")
     gw_start.add_argument("--upstream-timeout", type=float, default=60.0)
+    gw_start.add_argument("--policy-config")
     gw_start.set_defaults(func=cmd_gateway_start)
 
     bench = sub.add_parser("bench", help="运行 CodeAgent-SecBench 单个样本")
@@ -353,6 +452,12 @@ def build_parser() -> argparse.ArgumentParser:
     studio.add_argument("--bench-report")
     studio.add_argument("--title", default="RepoShield Studio")
     studio.set_defaults(func=cmd_studio)
+
+    dashboard = sub.add_parser("dashboard", help="Render a minimal local RepoShield dashboard HTML")
+    dashboard.add_argument("--audit", required=True)
+    dashboard.add_argument("--output", required=True)
+    dashboard.add_argument("--approvals")
+    dashboard.set_defaults(func=cmd_dashboard)
 
     sp = sub.add_parser("sandbox-profiles", help="列出沙箱 profile 表")
     sp.set_defaults(func=cmd_sandbox_profiles)

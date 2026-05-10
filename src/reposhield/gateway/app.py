@@ -27,9 +27,10 @@ class RepoShieldGateway:
         policy_role: str = "local_dev_strict",
         upstream: Any | None = None,
         agent_type: str = "openai",
+        policy_config: str | Path | None = None,
     ) -> None:
         self.repo_root = Path(repo_root).resolve()
-        self.cp = RepoShieldControlPlane(self.repo_root, audit_path=audit_path or self.repo_root / ".reposhield" / "gateway_audit.jsonl")
+        self.cp = RepoShieldControlPlane(self.repo_root, audit_path=audit_path or self.repo_root / ".reposhield" / "gateway_audit.jsonl", policy_config=policy_config)
         self.policy_runtime = PolicyRuntime(mode=policy_mode, role=policy_role)  # type: ignore[arg-type]
         self.upstream = upstream or LocalHeuristicUpstream()
         self.agent_type = agent_type
@@ -48,7 +49,11 @@ class RepoShieldGateway:
         if not self.cp.contract:
             self.cp.build_contract(str(request.get("task") or latest_user_text(messages) or "general code maintenance task"))
 
-        assistant_msg = self.upstream.complete(request, contexts=[{"source_id": sid, "content": c.get("content", "")} for sid, c in zip(source_ids, contexts)])
+        upstream_contexts = [{"source_id": sid, "content": c.get("content", "")} for sid, c in zip(source_ids, contexts)]
+        if request.get("stream") and hasattr(self.upstream, "complete_streaming"):
+            assistant_msg = self.upstream.complete_streaming(request, contexts=upstream_contexts)
+        else:
+            assistant_msg = self.upstream.complete(request, contexts=upstream_contexts)
         self.cp.audit.append("gateway_post_call", {"trace_id": trace.trace_id, "turn_id": turn_id, "assistant_hash": sha256_json(assistant_msg), "tool_call_count": len(assistant_msg.get("tool_calls", []) or [])}, task_id=self.cp.contract.task_id if self.cp.contract else None, actor="gateway")
 
         trust_floor = "untrusted" if source_ids else "trusted"
@@ -125,6 +130,7 @@ def serve_gateway(
     upstream_api_key: str | None = None,
     upstream_chat_path: str = "/chat/completions",
     upstream_timeout: float = 60.0,
+    policy_config: str | Path | None = None,
 ) -> None:
     """Start a tiny standard-library OpenAI-compatible HTTP server.
 
@@ -138,6 +144,7 @@ def serve_gateway(
         repo_root,
         audit_path=audit_path,
         policy_mode=policy_mode,
+        policy_config=policy_config,
         upstream=make_upstream(
             upstream_base_url=upstream_base_url,
             upstream_api_key=upstream_api_key,

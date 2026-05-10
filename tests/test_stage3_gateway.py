@@ -87,6 +87,27 @@ def test_openai_compatible_upstream_normalizes_chat_completion_message():
     assert upstream.sent[1]["stream"] is False
 
 
+def test_openai_compatible_upstream_aggregates_streaming_tool_call():
+    class FakeStreamingUpstream(OpenAICompatibleUpstream):
+        def __init__(self):
+            super().__init__(base_url="http://upstream.test/v1", api_key="test")
+
+        def _post_sse(self, path, payload):
+            assert path == "chat/completions"
+            assert payload["stream"] is True
+            return [
+                {"choices": [{"delta": {"role": "assistant"}}]},
+                {"choices": [{"delta": {"content": "I will test."}}]},
+                {"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "call_test", "type": "function", "function": {"name": "bash_exec", "arguments": "{\"command\":"}}]}}]},
+                {"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": "\"npm test\"}"}}]}}]},
+            ]
+
+    message = FakeStreamingUpstream().complete_streaming({"model": "gpt-test", "stream": True, "messages": [{"role": "user", "content": "test"}]})
+    assert message["content"] == "I will test."
+    assert message["tool_calls"][0]["function"]["name"] == "bash_exec"
+    assert message["tool_calls"][0]["function"]["arguments"] == '{"command":"npm test"}'
+
+
 def test_gateway_uses_injected_openai_compatible_upstream_and_blocks(tmp_path: Path):
     repo = make_repo(tmp_path)
 

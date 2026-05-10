@@ -13,6 +13,7 @@ from .contract import TaskContractBuilder
 from .models import ActionIR, PolicyDecision, RepoAssetGraph, SourceRecord, TaskContract
 from .package_guard import PackageGuard
 from .policy import PolicyEngine
+from .policy_config import ConfigurablePolicyOverrides
 from .sandbox import SandboxRunner
 from .sentry import SecretSentry
 
@@ -20,7 +21,7 @@ from .sentry import SecretSentry
 class RepoShieldControlPlane:
     """Single façade used by CLIs, adapters and the reference coding agent."""
 
-    def __init__(self, repo_root: str | Path, audit_path: str | Path | None = None, env: dict[str, str] | None = None):
+    def __init__(self, repo_root: str | Path, audit_path: str | Path | None = None, env: dict[str, str] | None = None, policy_config: str | Path | None = None):
         self.repo_root = Path(repo_root).resolve()
         self.audit = AuditLog(audit_path or (self.repo_root / ".reposhield" / "audit.jsonl"))
         self.provenance = ContextProvenance()
@@ -28,6 +29,7 @@ class RepoShieldControlPlane:
         self.asset_scanner = AssetScanner(self.repo_root, env=env)
         self.asset_graph: RepoAssetGraph = self.asset_scanner.scan()
         self.policy = PolicyEngine()
+        self.policy_overrides = ConfigurablePolicyOverrides.from_file(policy_config)
         self.package_guard = PackageGuard(self.repo_root)
         self.sandbox = SandboxRunner(self.repo_root)
         self.sentry = SecretSentry(self.asset_graph)
@@ -83,6 +85,8 @@ class RepoShieldControlPlane:
             trace = self.sandbox.preflight(action, decision=decision, package_event=package_event)
             self.audit.append("exec_trace", asdict(trace), task_id=self.contract.task_id, actor="sandbox", action_id=action.action_id)
             decision = self.policy.decide(self.contract, action, self.asset_graph, self.provenance.graph, package_event=package_event, secret_event=secret_event, exec_trace=trace)
+
+        decision = self.policy_overrides.apply(action, decision)
 
         self.audit.append("policy_decision", asdict(decision), task_id=self.contract.task_id, actor="policy_engine", source_ids=action.source_ids, action_id=action.action_id, decision_id=decision.decision_id)
         return action, decision
