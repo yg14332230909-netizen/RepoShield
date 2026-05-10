@@ -62,7 +62,7 @@ class GenericJSONToolParser:
         low = name.lower().replace("-", "_")
         joined_args = " ".join(str(v) for v in args.values())
 
-        if re.search(r"bash|shell|terminal|run_command|execute|exec", low):
+        if re.search(r"bash|shell|terminal|run_command|execute|exec", low) or (low == "run" and "command" in args):
             cmd = str(args.get("command") or args.get("cmd") or args.get("input") or args.get("raw") or joined_args)
             return ToolParseResult(name, "bash_exec", "EXEC", "EXECUTION.Env", cmd, "Bash", default_risk="high", parser_confidence=0.94, metadata={"args": args})
 

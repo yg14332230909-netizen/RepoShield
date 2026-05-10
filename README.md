@@ -26,9 +26,21 @@ Approximate maturity:
 Latest local verification:
 
 ```text
-python -m pytest --basetemp=.pytest_tmp -q   -> 77 passed
+pytest -q                                    -> 78 passed
 python -m compileall -q src tests            -> passed
 ruff check src tests                         -> passed
+```
+
+## Reproducible Verification
+
+From a fresh checkout, install the test extra and run the public validation
+commands:
+
+```bash
+python -m pip install -e ".[test]"
+pytest -q
+ruff check src tests
+python -m compileall -q src tests
 ```
 
 ## What It Protects

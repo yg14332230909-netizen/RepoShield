@@ -12,7 +12,7 @@ authors = [{ name = "RepoShield Demo" }]
 dependencies = []
 
 [project.optional-dependencies]
-test = ["pytest>=8", "PyYAML>=6"]
+test = ["pytest>=8", "PyYAML>=6", "ruff>=0.8"]
 yaml = ["PyYAML>=6"]
 
 [project.scripts]
@@ -25,7 +25,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q --basetemp=.pytest_tmp"
 
 [tool.ruff]
 line-length = 140
