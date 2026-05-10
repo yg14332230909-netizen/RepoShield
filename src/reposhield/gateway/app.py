@@ -15,7 +15,7 @@ from .confirmation_flow import GatewayConfirmationFlow
 from .openai_compat import extract_messages, latest_user_text
 from .response_transform import transform_response
 from .trace_state import GatewayTrace
-from .upstream import LocalHeuristicUpstream
+from .upstream import LocalHeuristicUpstream, OpenAICompatibleUpstream
 
 
 class RepoShieldGateway:
@@ -98,7 +98,34 @@ def simulate_gateway_request(repo_root: str | Path, request: dict[str, Any], aud
     return gw.handle_chat_completion(request)
 
 
-def serve_gateway(repo_root: str | Path, host: str = "127.0.0.1", port: int = 8765, audit_path: str | Path | None = None, policy_mode: str = "enforce") -> None:
+def make_upstream(
+    upstream_base_url: str | None = None,
+    upstream_api_key: str | None = None,
+    *,
+    upstream_chat_path: str = "/chat/completions",
+    upstream_timeout: float = 60.0,
+) -> Any:
+    if upstream_base_url:
+        return OpenAICompatibleUpstream(
+            base_url=upstream_base_url,
+            api_key=upstream_api_key,
+            chat_path=upstream_chat_path,
+            timeout=upstream_timeout,
+        )
+    return LocalHeuristicUpstream()
+
+
+def serve_gateway(
+    repo_root: str | Path,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    audit_path: str | Path | None = None,
+    policy_mode: str = "enforce",
+    upstream_base_url: str | None = None,
+    upstream_api_key: str | None = None,
+    upstream_chat_path: str = "/chat/completions",
+    upstream_timeout: float = 60.0,
+) -> None:
     """Start a tiny standard-library OpenAI-compatible HTTP server.
 
     Routes: POST /v1/chat/completions and POST /v1/responses.  This is intended
@@ -107,7 +134,17 @@ def serve_gateway(repo_root: str | Path, host: str = "127.0.0.1", port: int = 87
     """
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    gateway = RepoShieldGateway(repo_root, audit_path=audit_path, policy_mode=policy_mode)
+    gateway = RepoShieldGateway(
+        repo_root,
+        audit_path=audit_path,
+        policy_mode=policy_mode,
+        upstream=make_upstream(
+            upstream_base_url=upstream_base_url,
+            upstream_api_key=upstream_api_key,
+            upstream_chat_path=upstream_chat_path,
+            upstream_timeout=upstream_timeout,
+        ),
+    )
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802 - http.server API

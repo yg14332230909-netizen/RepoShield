@@ -60,3 +60,35 @@ src/reposhield/gateway/trace_state.py         trace/turn 状态
 ## 生产替换点
 
 当前 `LocalHeuristicUpstream` 用于 deterministic demo。真实部署时可以替换为真实 upstream client，保持 `RepoShieldGateway.handle_chat_completion()` 的输入输出不变。
+
+## 真实 OpenAI-compatible upstream
+
+`gateway-start` 可以直接转发到真实 OpenAI-compatible 后端。没有传 `--upstream-base-url` 时仍使用本地 deterministic upstream，方便测试和 bench。
+
+```bash
+export OPENAI_API_KEY=sk-...
+
+PYTHONPATH=src python -m reposhield gateway-start \
+  --repo ./demo_repo \
+  --host 127.0.0.1 \
+  --port 8765 \
+  --upstream-base-url https://api.openai.com/v1
+```
+
+真实 agent 侧只需要把 OpenAI-compatible client 指向 RepoShield：
+
+```text
+base_url = http://127.0.0.1:8765/v1
+api_key  = reposhield-local
+model    = gpt-4.1
+```
+
+Gateway 会把请求转发给 upstream，读取 upstream 返回的 assistant message/tool_calls，再执行 `InstructionIR -> ActionIR -> PolicyRuntime` 治理。被拦截的 tool call 不会继续下发给 agent 执行，响应中会包含 RepoShield 的阻断说明和审计 trace。
+
+可选参数：
+
+```text
+--upstream-api-key       不传时读取 OPENAI_API_KEY
+--upstream-chat-path     默认 /chat/completions
+--upstream-timeout       默认 60 秒
+```

@@ -15,7 +15,7 @@ from .bench import run_sample
 from .bench_suite import generate_stage2_samples, run_suite
 from .control_plane import RepoShieldControlPlane
 from .demo import run_demo
-from .gateway import serve_gateway, simulate_gateway_request
+from .gateway import RepoShieldGateway, make_upstream, serve_gateway, simulate_gateway_request
 from .gateway_bench import generate_stage3_gateway_samples, run_gateway_suite
 from .replay import verify_bundle
 from .report import render_incident_html, render_suite_html
@@ -151,13 +151,37 @@ def cmd_gateway_demo(args: argparse.Namespace) -> int:
 
 def cmd_gateway_simulate(args: argparse.Namespace) -> int:
     request = json.loads(Path(args.request).read_text(encoding="utf-8"))
-    result = simulate_gateway_request(args.repo, request, audit_path=args.audit or Path(args.repo) / ".reposhield" / "gateway_audit.jsonl", policy_mode=args.policy_mode)
+    if args.upstream_base_url:
+        gw = RepoShieldGateway(
+            args.repo,
+            audit_path=args.audit or Path(args.repo) / ".reposhield" / "gateway_audit.jsonl",
+            policy_mode=args.policy_mode,
+            upstream=make_upstream(
+                upstream_base_url=args.upstream_base_url,
+                upstream_api_key=args.upstream_api_key,
+                upstream_chat_path=args.upstream_chat_path,
+                upstream_timeout=args.upstream_timeout,
+            ),
+        )
+        result = gw.handle_chat_completion(request)
+    else:
+        result = simulate_gateway_request(args.repo, request, audit_path=args.audit or Path(args.repo) / ".reposhield" / "gateway_audit.jsonl", policy_mode=args.policy_mode)
     _print_json(result)
     return 0
 
 
 def cmd_gateway_start(args: argparse.Namespace) -> int:
-    serve_gateway(args.repo, host=args.host, port=args.port, audit_path=args.audit or Path(args.repo) / ".reposhield" / "gateway_audit.jsonl", policy_mode=args.policy_mode)
+    serve_gateway(
+        args.repo,
+        host=args.host,
+        port=args.port,
+        audit_path=args.audit or Path(args.repo) / ".reposhield" / "gateway_audit.jsonl",
+        policy_mode=args.policy_mode,
+        upstream_base_url=args.upstream_base_url,
+        upstream_api_key=args.upstream_api_key,
+        upstream_chat_path=args.upstream_chat_path,
+        upstream_timeout=args.upstream_timeout,
+    )
     return 0
 
 
@@ -229,6 +253,10 @@ def build_parser() -> argparse.ArgumentParser:
     gw_sim.add_argument("--request", required=True)
     gw_sim.add_argument("--audit")
     gw_sim.add_argument("--policy-mode", choices=["enforce", "observe_only", "warn", "disabled"], default="enforce")
+    gw_sim.add_argument("--upstream-base-url", help="Forward to a real OpenAI-compatible upstream, for example https://api.openai.com/v1")
+    gw_sim.add_argument("--upstream-api-key", help="Upstream API key. Defaults to OPENAI_API_KEY when omitted.")
+    gw_sim.add_argument("--upstream-chat-path", default="/chat/completions", help="Path under upstream base URL for chat completions.")
+    gw_sim.add_argument("--upstream-timeout", type=float, default=60.0)
     gw_sim.set_defaults(func=cmd_gateway_simulate)
 
     gw_start = sub.add_parser("gateway-start", help="启动标准库实现的 /v1/chat/completions 本地网关")
@@ -237,6 +265,10 @@ def build_parser() -> argparse.ArgumentParser:
     gw_start.add_argument("--port", type=int, default=8765)
     gw_start.add_argument("--audit")
     gw_start.add_argument("--policy-mode", choices=["enforce", "observe_only", "warn", "disabled"], default="enforce")
+    gw_start.add_argument("--upstream-base-url", help="Forward to a real OpenAI-compatible upstream, for example https://api.openai.com/v1")
+    gw_start.add_argument("--upstream-api-key", help="Upstream API key. Defaults to OPENAI_API_KEY when omitted.")
+    gw_start.add_argument("--upstream-chat-path", default="/chat/completions", help="Path under upstream base URL for chat completions.")
+    gw_start.add_argument("--upstream-timeout", type=float, default=60.0)
     gw_start.set_defaults(func=cmd_gateway_start)
 
     bench = sub.add_parser("bench", help="运行 CodeAgent-SecBench 单个样本")
