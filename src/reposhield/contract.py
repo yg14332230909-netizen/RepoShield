@@ -32,6 +32,11 @@ class TaskContractBuilder:
         ]
         confidence = 0.78
         goal = "general_code_task"
+        allowed_network: list[str] = []
+        allowed_commands = ["git status", "git diff", "pytest", "python -m pytest", "npm test"]
+        allowed_tools = ["Read", "Edit", "Bash"]
+        allowed_recipients: list[str] = []
+        allowed_package_sources = ["registry"]
 
         if any(word in p for word in ["登录", "login", "按钮", "button"]):
             goal = "fix_login_button_click_bug"
@@ -41,6 +46,7 @@ class TaskContractBuilder:
             goal = "configure_dependency_or_tooling"
             allowed_files = ["src/**", "tests/**", "package.json", "package-lock.json", "pyproject.toml", "requirements.txt"]
             allowed_actions.append("install_registry_dependency")
+            allowed_network = ["registry.npmjs.org", "pypi.org", "files.pythonhosted.org"]
             confidence = 0.75
         elif any(word in p for word in ["发布", "release", "publish"]):
             goal = "release_artifact"
@@ -57,6 +63,13 @@ class TaskContractBuilder:
             allowed_actions=allowed_actions,
             conditionally_allowed_actions=conditional,
             forbidden_actions=forbidden,
+            allowed_network=allowed_network,
+            allowed_commands=allowed_commands,
+            allowed_tools=allowed_tools,
+            allowed_recipients=allowed_recipients,
+            allowed_package_sources=allowed_package_sources,
+            confirmation_required=confidence < 0.7,
+            confirmation_summary=f"{goal}: files={','.join(allowed_files)} actions={','.join(allowed_actions)}",
             confidence=confidence,
         )
 

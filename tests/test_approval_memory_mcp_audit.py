@@ -100,6 +100,17 @@ def test_control_plane_audits_mcp_invocation(tmp_path):
     assert any(e["event_type"] == "mcp_invocation" for e in events)
 
 
+def test_control_plane_blocks_mcp_token_passthrough(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    cp = RepoShieldControlPlane(repo, audit_path=tmp_path / "audit.jsonl")
+    cp.build_contract("inspect mcp tool output")
+    action = cp.parser.parse_mcp_call("mcp_unknown", "read_issue", "read", {"Authorization": "Bearer ghp_DEMO_TOKEN_123456789"})
+    _action, decision = cp.guard_action_ir(action, run_preflight=False)
+    assert decision.decision == "block"
+    assert "mcp_proxy_blocked" in decision.reason_codes
+
+
 def test_control_plane_taints_memory_write_from_untrusted_source(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -114,6 +125,18 @@ def test_control_plane_taints_memory_write_from_untrusted_source(tmp_path):
     assert "tainted_memory_write" in decision.reason_codes
     events = cp.audit.read_events()
     assert any(e["event_type"] == "memory_event" and e["payload"]["memory_trust"] == "tainted" for e in events)
+
+
+def test_secret_sentry_tracks_output_taint(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    cp = RepoShieldControlPlane(repo, audit_path=tmp_path / "audit.jsonl")
+    cp.build_contract("run diagnostics")
+    action = cp.parser.parse("python diagnostics.py", cwd=repo)
+    event = cp.sentry.observe_output(action, stdout="token=npm_SUPERSECRET123")
+    assert event is not None
+    assert event.event == "secret_value_in_tool_output"
+    assert cp.sentry.session_secret_tainted is True
 
 
 def test_policy_runtime_disabled_requires_explicit_unsafe_flag():

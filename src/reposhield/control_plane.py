@@ -109,6 +109,8 @@ class RepoShieldControlPlane:
             server_id = str(action.metadata.get("mcp_server_id") or "mcp_adapter")
             tool_name = str(action.metadata.get("mcp_tool_name") or action.raw_action)
             mcp_invocation = self.mcp_proxy.invoke(server_id, tool_name, mcp_args)
+            action.metadata["mcp_decision"] = mcp_invocation.decision
+            action.metadata["mcp_reason_codes"] = mcp_invocation.reason_codes
             self.audit.append("mcp_invocation", asdict(mcp_invocation), task_id=self.contract.task_id, actor="mcp_proxy", source_ids=action.source_ids, action_id=action.action_id)
             if mcp_invocation.output_source_id:
                 self.audit.append("source_ingested", {"source_id": mcp_invocation.output_source_id, "source_type": "mcp_output"}, task_id=self.contract.task_id, actor="mcp_proxy", source_ids=[mcp_invocation.output_source_id], action_id=action.action_id)

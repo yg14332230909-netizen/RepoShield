@@ -107,6 +107,9 @@ class PolicyEngine:
 
         if action.semantic_action == "invoke_destructive_mcp_tool":
             return self._decision(action, "block", max(score, 90), [*reason_codes, "destructive_mcp_tool"], ["mcp_proxy", "human_approval"], "Destructive MCP tools are blocked.", intent, package_event, exec_trace)
+        if action.semantic_action == "invoke_mcp_tool" and action.metadata.get("mcp_decision") == "blocked":
+            mcp_reasons = [str(r) for r in action.metadata.get("mcp_reason_codes", [])]
+            return self._decision(action, "block", max(score, 88), [*reason_codes, *mcp_reasons, "mcp_proxy_blocked"], ["mcp_proxy"], "MCP proxy blocked the invocation before tool execution.", intent, package_event, exec_trace)
 
         if action.semantic_action == "memory_write":
             if context_graph.has_untrusted(action.source_ids):

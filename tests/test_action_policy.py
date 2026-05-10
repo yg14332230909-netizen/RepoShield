@@ -103,12 +103,14 @@ def test_parser_blocks_file_path_escape(tmp_path):
 
 def test_package_guard_uses_manager_specific_parser_and_lockfile_evidence(tmp_path):
     repo = make_repo(tmp_path)
-    (repo / "package-lock.json").write_text("{}", encoding="utf-8")
+    (repo / "package-lock.json").write_text('{"packages":{}}', encoding="utf-8")
     action = ActionParser().parse("npm install --package-lock-only lodash", cwd=repo)
     event = PackageGuard(repo).analyze(action)
     assert event is not None
     assert event.package == "lodash"
     assert "lockfile_present:package-lock.json" in event.reason_codes
+    assert "package_manifest_diff_required" in event.reason_codes
+    assert "lockfile_diff_target_missing" in event.reason_codes
 
 
 def test_package_guard_detects_pip_extra_index_registry(tmp_path):

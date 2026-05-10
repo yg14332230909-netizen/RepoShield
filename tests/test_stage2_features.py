@@ -49,6 +49,13 @@ def test_sandbox_profiles_expose_enforcement_matrix():
     assert "secret_masks" in matrix["test_sandbox"]["enforced_controls"]
 
 
+def test_task_contract_contains_extended_boundaries():
+    contract = RepoShieldControlPlane(Path.cwd()).contract_builder.build("install eslint dependency")
+    assert "registry.npmjs.org" in contract.allowed_network
+    assert "registry" in contract.allowed_package_sources
+    assert contract.confirmation_summary
+
+
 def test_aider_adapter_blocks_injected_dependency_but_allows_utility(tmp_path: Path):
     repo = make_repo(tmp_path)
     cp = RepoShieldControlPlane(repo, audit_path=tmp_path / "audit.jsonl")

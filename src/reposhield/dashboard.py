@@ -26,7 +26,20 @@ def render_dashboard(audit_path: str | Path, output_path: str | Path, approvals_
             f"<td>{html.escape(str(payload.get('decision', '')))}</td>"
             f"<td>{html.escape(str(payload.get('risk_score', '')))}</td>"
             f"<td>{html.escape(', '.join(payload.get('reason_codes', [])))}</td>"
+            f"<td>{html.escape(_rule_label(payload))}</td>"
+            f"<td>{html.escape(', '.join(str(x) for x in payload.get('evidence_refs', [])))}</td>"
             f"<td><code>{html.escape(str(event.get('action_id') or ''))}</code></td>"
+            "</tr>"
+        )
+    chains = _evidence_chains(events)
+    chain_rows = []
+    for action_id, chain in list(chains.items())[-50:]:
+        chain_rows.append(
+            "<tr>"
+            f"<td><code>{html.escape(action_id)}</code></td>"
+            f"<td>{html.escape(', '.join(chain.get('sources', [])))}</td>"
+            f"<td>{html.escape(', '.join(chain.get('rules', [])))}</td>"
+            f"<td>{html.escape(', '.join(chain.get('decisions', [])))}</td>"
             "</tr>"
         )
     approval_rows = []
@@ -48,7 +61,9 @@ def render_dashboard(audit_path: str | Path, output_path: str | Path, approvals_
 <h1>RepoShield Dashboard</h1>
 <div class="card"><strong>Audit:</strong> {html.escape(str(audit_path))}<br><strong>Events:</strong> {len(events)}<br><strong>Blocked / approval-required:</strong> {len(blocked)}</div>
 <h2>Recent Policy Blocks</h2>
-<table><thead><tr><th>time</th><th>decision</th><th>risk</th><th>reasons</th><th>action</th></tr></thead><tbody>{''.join(rows)}</tbody></table>
+<table><thead><tr><th>time</th><th>decision</th><th>risk</th><th>reasons</th><th>rules</th><th>evidence</th><th>action</th></tr></thead><tbody>{''.join(rows)}</tbody></table>
+<h2>Evidence Chains</h2>
+<table><thead><tr><th>action</th><th>sources</th><th>rules</th><th>decisions</th></tr></thead><tbody>{''.join(chain_rows)}</tbody></table>
 <h2>Approval Events</h2>
 <table><thead><tr><th>time</th><th>type</th><th>approval</th><th>action</th></tr></thead><tbody>{''.join(approval_rows)}</tbody></table>
 </body></html>"""
@@ -66,3 +81,29 @@ def _read_jsonl(path: str | Path | None) -> list[dict]:
                 rows.append(json.loads(line))
     return rows
 
+
+def _rule_label(payload: dict) -> str:
+    rules = payload.get("matched_rules", []) or []
+    return ", ".join(str(rule.get("rule_id") or rule.get("name") or "") for rule in rules)
+
+
+def _evidence_chains(events: list[dict]) -> dict[str, dict[str, list[str]]]:
+    chains: dict[str, dict[str, list[str]]] = {}
+    for event in events:
+        action_id = event.get("action_id")
+        if not action_id:
+            continue
+        chain = chains.setdefault(str(action_id), {"sources": [], "rules": [], "decisions": []})
+        for sid in event.get("source_ids", []) or []:
+            if sid not in chain["sources"]:
+                chain["sources"].append(str(sid))
+        payload = event.get("payload", {})
+        if event.get("event_type") == "policy_decision":
+            for rule in payload.get("matched_rules", []) or []:
+                rid = str(rule.get("rule_id") or rule.get("name") or "")
+                if rid and rid not in chain["rules"]:
+                    chain["rules"].append(rid)
+            decision = str(payload.get("decision") or "")
+            if decision and decision not in chain["decisions"]:
+                chain["decisions"].append(decision)
+    return chains

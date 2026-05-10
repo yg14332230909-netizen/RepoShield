@@ -157,6 +157,13 @@ class TaskContract:
     allowed_actions: list[str]
     conditionally_allowed_actions: list[dict[str, str]]
     forbidden_actions: list[str]
+    allowed_network: list[str] = field(default_factory=list)
+    allowed_commands: list[str] = field(default_factory=list)
+    allowed_tools: list[str] = field(default_factory=list)
+    allowed_recipients: list[str] = field(default_factory=list)
+    allowed_package_sources: list[str] = field(default_factory=list)
+    confirmation_required: bool = False
+    confirmation_summary: str = ""
     max_risk_without_approval: Risk = "medium"
     confidence: float = 0.75
     revision: int = 1
