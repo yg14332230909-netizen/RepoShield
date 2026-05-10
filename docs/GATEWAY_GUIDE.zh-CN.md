@@ -92,3 +92,36 @@ Gateway 会把请求转发给 upstream，读取 upstream 返回的 assistant mes
 --upstream-chat-path     默认 /chat/completions
 --upstream-timeout       默认 60 秒
 ```
+## 2026-05 更新：真实 upstream 与 streaming 边界
+
+`gateway-start` 已支持通过 `--upstream-base-url` 接入真实 OpenAI-compatible 后端：
+
+```bash
+PYTHONPATH=src python -m reposhield gateway-start \
+  --repo ./demo_repo \
+  --host 127.0.0.1 \
+  --port 8765 \
+  --upstream-base-url https://api.openai.com/v1
+```
+
+真实 agent 侧配置：
+
+```text
+base_url = http://127.0.0.1:8765/v1
+api_key  = reposhield-local
+model    = gpt-4.1
+```
+
+Gateway 会把请求转发到 upstream，读取 upstream 返回的 assistant message / tool_calls，再执行：
+
+```text
+InstructionIR -> ActionIR -> PolicyRuntime -> response_transform
+```
+
+当前实现会强制 upstream `stream=false`。原因是标准库 HTTP server 目前返回普通 JSON，还没有实现 SSE streaming proxy。对于强依赖 `stream=true` 的 agent，需要后续补充流式 tool call 聚合、治理和中止响应。
+
+更多面向小白的接入说明见：
+
+```text
+docs/REAL_AGENT_INTEGRATION.zh-CN.md
+```

