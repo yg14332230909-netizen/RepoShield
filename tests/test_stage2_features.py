@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from reposhield.adapters.generic_cli import GenericCLIAdapter
 from reposhield.adapters.aider import AiderAdapter
+from reposhield.adapters.generic_cli import GenericCLIAdapter
 from reposhield.adapters.guarded_exec import GuardedExecAdapter
 from reposhield.agent_init import init_agent
 from reposhield.approvals import ApprovalCenter
