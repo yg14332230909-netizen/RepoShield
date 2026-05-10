@@ -12,7 +12,7 @@ from ..models import new_id, sha256_json
 from ..plugins import ToolParserRegistry
 from ..policy_runtime import PolicyRuntime
 from .confirmation_flow import GatewayConfirmationFlow
-from .openai_compat import extract_messages, latest_user_text
+from .openai_compat import chat_completion_stream_events, extract_messages, latest_user_text
 from .response_transform import transform_response
 from .trace_state import GatewayTrace
 from .upstream import LocalHeuristicUpstream, OpenAICompatibleUpstream
@@ -159,6 +159,18 @@ def serve_gateway(
                 result = gateway.handle_chat_completion(request)
                 payload = result["response"]
                 payload["reposhield"] = {"trace_id": result["trace_id"], "audit_log": result["audit_log"], "guarded_results": result["guarded_results"]}
+                if request.get("stream"):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                    self.send_header("Cache-Control", "no-cache")
+                    self.send_header("Connection", "keep-alive")
+                    self.send_header("X-RepoShield-Trace-Id", str(result["trace_id"]))
+                    self.send_header("X-RepoShield-Audit-Log", str(result["audit_log"]))
+                    self.end_headers()
+                    for event in chat_completion_stream_events(payload):
+                        self.wfile.write(event)
+                        self.wfile.flush()
+                    return
                 data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")

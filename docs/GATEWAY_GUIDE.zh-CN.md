@@ -118,7 +118,9 @@ Gateway 会把请求转发到 upstream，读取 upstream 返回的 assistant mes
 InstructionIR -> ActionIR -> PolicyRuntime -> response_transform
 ```
 
-当前实现会强制 upstream `stream=false`。原因是标准库 HTTP server 目前返回普通 JSON，还没有实现 SSE streaming proxy。对于强依赖 `stream=true` 的 agent，需要后续补充流式 tool call 聚合、治理和中止响应。
+当前 Gateway 已支持 agent 侧 `stream=true`，会返回 OpenAI-compatible `text/event-stream`。实现方式是先完成上游请求和 RepoShield 治理，再把最终安全响应编码成 SSE chunks。
+
+真实 upstream client 仍会强制 upstream `stream=false`，避免在 tool call 尚未完整识别和治理前把 delta 透传给 agent。后续如果要做完整 token-by-token streaming proxy，需要补充流式 tool call 聚合、治理和中止响应。
 
 更多面向小白的接入说明见：
 

@@ -60,6 +60,8 @@ Chinese docs are the most complete right now. Start with [README.zh-CN.md](READM
 
 - OpenAI-compatible `/v1/chat/completions` and `/v1/responses` gateway
 - real OpenAI-compatible upstream forwarding
+- OpenAI-compatible SSE response mode for `stream=true`
+- `exec-guard` shell-command adapter for real agent tool wrapping
 - InstructionIR for model messages and tool calls
 - ActionIR for executable actions
 - task contract generation
@@ -97,8 +99,22 @@ Still needs production hardening:
 Current verification:
 
 ```text
-pytest -q --basetemp .pytest_tmp -> 29 passed
+pytest -q --basetemp .pytest_tmp -> 32 passed
 ```
+
+## Real Tool Guard
+
+For agents that can wrap their shell tool, use:
+
+```bash
+PYTHONPATH=src python -m reposhield exec-guard \
+  --repo ./your-repo \
+  --task "fix login button and run tests" \
+  --source-file ./issue.md \
+  -- npm test
+```
+
+`exec-guard` runs RepoShield before execution. Blocked commands are not executed; `allow_in_sandbox` commands are preflighted instead of running directly on the host.
 
 ## Documentation
 
@@ -109,4 +125,3 @@ Recommended reading order:
 3. [Documentation Map](docs/README.zh-CN.md)
 4. [Gateway Guide](docs/GATEWAY_GUIDE.zh-CN.md)
 5. [Tool Parser Plugin Guide](docs/TOOL_PARSER_PLUGIN_GUIDE.zh-CN.md)
-

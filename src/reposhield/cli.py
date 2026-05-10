@@ -11,6 +11,7 @@ from pathlib import Path
 from .action_parser import ActionParser
 from .adapters.aider import AiderAdapter
 from .adapters.generic_cli import GenericCLIAdapter
+from .adapters.guarded_exec import GuardedExecAdapter
 from .bench import run_sample
 from .bench_suite import generate_stage2_samples, run_suite
 from .control_plane import RepoShieldControlPlane
@@ -120,6 +121,31 @@ def cmd_run_agent(args: argparse.Namespace) -> int:
     result = adapter.run()
     _print_json(asdict(result))
     return 0
+
+
+def cmd_exec_guard(args: argparse.Namespace) -> int:
+    command = list(args.command or [])
+    if command and command[0] == "--":
+        command = command[1:]
+    if not command:
+        raise ValueError("exec-guard requires a command after --")
+    cp = RepoShieldControlPlane(args.repo, audit_path=args.audit or Path(args.repo) / ".reposhield" / "exec_guard_audit.jsonl")
+    cp.build_contract(args.task)
+    source_ids: list[str] = []
+    if args.source_file:
+        content = Path(args.source_file).read_text(encoding="utf-8")
+        src = cp.ingest_source(args.source_type, content, retrieval_path=args.source_file, source_id=args.source_id)
+        source_ids.append(src.source_id)
+    result = GuardedExecAdapter(args.repo, cp, args.task).run(command, source_ids=source_ids)
+    _print_json(asdict(result))
+    decision = result.decision.get("decision")
+    if decision == "allow":
+        return int(result.exit_code or 0)
+    if decision == "allow_in_sandbox":
+        return int(result.exit_code or 0)
+    if decision == "sandbox_then_approval":
+        return 3
+    return 2
 
 
 def _make_gateway_demo_repo(workdir: Path) -> Path:
@@ -242,6 +268,16 @@ def build_parser() -> argparse.ArgumentParser:
     run_agent.add_argument("--agent-command", nargs="+")
     run_agent.add_argument("--audit")
     run_agent.set_defaults(func=cmd_run_agent)
+
+    exec_guard = sub.add_parser("exec-guard", help="Guard and optionally execute a real shell-tool command")
+    exec_guard.add_argument("--repo", required=True)
+    exec_guard.add_argument("--task", required=True)
+    exec_guard.add_argument("--source-file")
+    exec_guard.add_argument("--source-type", default="github_issue_body")
+    exec_guard.add_argument("--source-id", default="src_exec_guard_source")
+    exec_guard.add_argument("--audit")
+    exec_guard.add_argument("command", nargs=argparse.REMAINDER)
+    exec_guard.set_defaults(func=cmd_exec_guard)
 
     gw_demo = sub.add_parser("gateway-demo", help="运行 v0.3 OpenAI-compatible Gateway 攻击链 demo")
     gw_demo.add_argument("--workdir")

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from reposhield.gateway import OpenAICompatibleUpstream, RepoShieldGateway, simulate_gateway_request
+from reposhield.gateway.openai_compat import chat_completion_stream_events
 from reposhield.gateway_bench import generate_stage3_gateway_samples, run_gateway_suite
 from reposhield.instruction_ir import InstructionBuilder, InstructionLowerer
 from reposhield.plugins import ToolParserRegistry
@@ -114,6 +115,24 @@ def test_gateway_uses_injected_openai_compatible_upstream_and_blocks(tmp_path: P
     )
     assert result["guarded_results"][0]["action"]["semantic_action"] == "install_git_dependency"
     assert result["guarded_results"][0]["runtime"]["effective_decision"] == "block"
+
+
+def test_chat_completion_stream_events_emit_sse_done(tmp_path: Path):
+    repo = make_repo(tmp_path)
+    result = simulate_gateway_request(
+        repo,
+        {
+            "model": "reposhield/local-heuristic",
+            "stream": True,
+            "messages": [{"role": "user", "content": "fix login and test"}],
+        },
+        audit_path=tmp_path / "audit.jsonl",
+    )
+    events = chat_completion_stream_events(result["response"])
+    assert events[0].startswith(b"data: ")
+    assert events[-1] == b"data: [DONE]\n\n"
+    joined = b"".join(events).decode("utf-8")
+    assert "chat.completion.chunk" in joined
 
 
 def test_policy_runtime_observe_only_does_not_effectively_block(tmp_path: Path):

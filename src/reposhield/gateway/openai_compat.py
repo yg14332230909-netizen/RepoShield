@@ -1,6 +1,7 @@
 """OpenAI-compatible request/response helpers."""
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from ..models import new_id, utc_now
@@ -34,6 +35,69 @@ def assistant_message_response(message: dict[str, Any], model: str = "reposhield
         "choices": [{"index": 0, "message": message, "finish_reason": "tool_calls" if message.get("tool_calls") else "stop"}],
         "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
     }
+
+
+def chat_completion_stream_events(response: dict[str, Any]) -> list[bytes]:
+    """Encode a non-stream chat completion as OpenAI-compatible SSE events.
+
+    The gateway still performs policy checks on a complete assistant message, then
+    emits a standards-shaped stream for agents that require `stream=true`.
+    """
+    model = str(response.get("model") or "reposhield/local")
+    message = ((response.get("choices") or [{}])[0].get("message") or {}) if isinstance(response.get("choices"), list) else {}
+    finish_reason = ((response.get("choices") or [{}])[0].get("finish_reason") or "stop") if isinstance(response.get("choices"), list) else "stop"
+    stream_id = str(response.get("id") or new_id("chatcmpl"))
+    created = response.get("created") or utc_now()
+    events: list[dict[str, Any]] = [
+        {
+            "id": stream_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
+        }
+    ]
+
+    content = str(message.get("content") or "")
+    for chunk in _content_chunks(content):
+        events.append(
+            {
+                "id": stream_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [{"index": 0, "delta": {"content": chunk}, "finish_reason": None}],
+            }
+        )
+
+    tool_calls = message.get("tool_calls") or []
+    if tool_calls:
+        events.append(
+            {
+                "id": stream_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [{"index": 0, "delta": {"tool_calls": tool_calls}, "finish_reason": None}],
+            }
+        )
+
+    events.append(
+        {
+            "id": stream_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}],
+        }
+    )
+    return [f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode("utf-8") for event in events] + [b"data: [DONE]\n\n"]
+
+
+def _content_chunks(content: str, size: int = 256) -> list[str]:
+    if not content:
+        return []
+    return [content[i:i + size] for i in range(0, len(content), size)]
 
 
 def safe_block_message(reason: str, decisions: list[dict[str, Any]], trace_id: str) -> dict[str, Any]:

