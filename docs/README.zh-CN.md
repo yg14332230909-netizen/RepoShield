@@ -15,40 +15,38 @@
 
 ## 按任务阅读
 
-想接入一个真实 agent：
+接入真实 agent：
 
 - [真实 Agent 接入指南](REAL_AGENT_INTEGRATION.zh-CN.md)
 - [Gateway 指南](GATEWAY_GUIDE.zh-CN.md)
 - [Tool Parser Plugin 指南](TOOL_PARSER_PLUGIN_GUIDE.zh-CN.md)
 - [Adapter 指南](ADAPTER_GUIDE.zh-CN.md)
 
-想理解安全模型：
+理解安全控制链：
 
-- [威胁模型](threat_model.md)
-- [系统架构](system_architecture.md)
 - [Sandbox 指南](SANDBOX_GUIDE.zh-CN.md)
 - [Policy Pack 指南](POLICY_PACK_GUIDE.zh-CN.md)
+- [测试用例说明](TEST_CASES.zh-CN.md)
 
-想跑 demo 或 bench：
+跑 demo 或 bench：
 
 - [第三阶段使用说明](THIRD_STAGE_USAGE.zh-CN.md)
 - [Gateway Bench 指南](BENCH_GATEWAY_GUIDE.zh-CN.md)
 - [Bench Report 指南](BENCH_REPORT_GUIDE.zh-CN.md)
-- [测试用例说明](TEST_CASES.zh-CN.md)
 
-想看报告和可视化：
+看报告和可视化：
 
 - [Studio 指南](STUDIO_GUIDE.zh-CN.md)
 - [Bench Report 指南](BENCH_REPORT_GUIDE.zh-CN.md)
 
-想了解历史阶段：
+历史阶段资料：
 
 - [第二阶段使用说明](SECOND_STAGE_USAGE.zh-CN.md)
 - [第三阶段使用说明](THIRD_STAGE_USAGE.zh-CN.md)
 
-## 文档现状
+## 建议重点维护
 
-当前最清晰、最推荐维护的是：
+当前最推荐维护的是：
 
 ```text
 README.zh-CN.md
@@ -58,7 +56,7 @@ docs/GATEWAY_GUIDE.zh-CN.md
 docs/TOOL_PARSER_PLUGIN_GUIDE.zh-CN.md
 ```
 
-其他文档保留为专题说明或历史资料。后续建议逐步把重复内容收敛到上述入口文档中。
+其他文档保留为专题说明或历史资料。后续建议继续把重复内容收敛到上述入口文档中。
 
 ## 一句话路线图
 
