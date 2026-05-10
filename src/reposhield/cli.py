@@ -13,6 +13,7 @@ from .adapters.aider import AiderAdapter
 from .adapters.generic_cli import GenericCLIAdapter
 from .adapters.guarded_exec import GuardedExecAdapter
 from .agent_init import init_agent
+from .approval_api import serve_approval_api
 from .approvals import ApprovalCenter, ApprovalStore
 from .bench import run_sample
 from .bench_suite import generate_stage2_samples, run_suite
@@ -21,10 +22,12 @@ from .dashboard import render_dashboard
 from .demo import run_demo
 from .gateway import RepoShieldGateway, make_upstream, serve_gateway, simulate_gateway_request
 from .gateway_bench import generate_stage3_gateway_samples, run_gateway_suite
+from .policy_runtime import load_policy_pack, validate_policy_pack
 from .replay import verify_bundle
 from .report import render_incident_html, render_suite_html
 from .sandbox import SANDBOX_PROFILES
 from .studio import render_studio_html
+from .trace_matrix import run_trace_matrix
 
 
 def _print_json(data: object) -> None:
@@ -114,9 +117,15 @@ def cmd_incident_report(args: argparse.Namespace) -> int:
 
 
 def cmd_studio(args: argparse.Namespace) -> int:
-    out = render_studio_html(args.audit, args.output, bench_report=args.bench_report, title=args.title)
+    out = render_studio_html(args.audit, args.output, bench_report=args.bench_report, trace_matrix_report=args.trace_matrix_report, approvals_path=args.approvals, title=args.title)
     _print_json({"studio_report": str(out)})
     return 0
+
+
+def cmd_trace_matrix(args: argparse.Namespace) -> int:
+    report = run_trace_matrix(args.traces, args.output)
+    _print_json(report)
+    return 0 if report.get("metrics", {}).get("pass_rate", 0) >= args.min_pass_rate else 3
 
 
 def cmd_run_agent(args: argparse.Namespace) -> int:
@@ -223,6 +232,18 @@ def cmd_approvals(args: argparse.Namespace) -> int:
         _print_json({"approval_request_id": args.approval_id, "decision": "denied"})
         return 0
     raise ValueError(f"unknown approvals command: {args.approval_cmd}")
+
+
+def cmd_approval_api_start(args: argparse.Namespace) -> int:
+    serve_approval_api(args.store, host=args.host, port=args.port, api_key=args.api_key)
+    return 0
+
+
+def cmd_policy_validate(args: argparse.Namespace) -> int:
+    data = load_policy_pack(args.policy_pack)
+    errors = validate_policy_pack(data)
+    _print_json({"ok": not errors, "errors": errors, "policy_pack": args.policy_pack})
+    return 0 if not errors else 4
 
 
 def cmd_dashboard(args: argparse.Namespace) -> int:
@@ -365,6 +386,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_agent.add_argument("--audit")
     run_agent.set_defaults(func=cmd_run_agent)
 
+    tm = sub.add_parser("trace-matrix", help="Replay agent tool-call traces and emit a compatibility matrix")
+    tm.add_argument("--traces", required=True)
+    tm.add_argument("--output", required=True)
+    tm.add_argument("--min-pass-rate", type=float, default=1.0)
+    tm.set_defaults(func=cmd_trace_matrix)
+
     exec_guard = sub.add_parser("exec-guard", help="Guard and optionally execute a real shell-tool command")
     exec_guard.add_argument("--repo", required=True)
     exec_guard.add_argument("--task", required=True)
@@ -411,6 +438,17 @@ def build_parser() -> argparse.ArgumentParser:
     approval_deny.add_argument("approval_id")
     approval_deny.add_argument("--denied-by", default="local_user")
     approval_deny.set_defaults(func=cmd_approvals)
+
+    approval_api = sub.add_parser("approval-api-start", help="Start a local HTTP approval API")
+    approval_api.add_argument("--store", default=".reposhield/approvals.jsonl")
+    approval_api.add_argument("--host", default="127.0.0.1")
+    approval_api.add_argument("--port", type=int, default=8776)
+    approval_api.add_argument("--api-key", help="Require Authorization: Bearer <key>. Defaults to REPOSHIELD_APPROVAL_API_KEY or reposhield-local.")
+    approval_api.set_defaults(func=cmd_approval_api_start)
+
+    policy_validate = sub.add_parser("policy-validate", help="Validate a RepoShield policy pack schema")
+    policy_validate.add_argument("--policy-pack", required=True)
+    policy_validate.set_defaults(func=cmd_policy_validate)
 
     gw_demo = sub.add_parser("gateway-demo", help="运行 v0.3 OpenAI-compatible Gateway 攻击链 demo")
     gw_demo.add_argument("--workdir")
@@ -491,6 +529,8 @@ def build_parser() -> argparse.ArgumentParser:
     studio.add_argument("--audit", required=True)
     studio.add_argument("--output", required=True)
     studio.add_argument("--bench-report")
+    studio.add_argument("--trace-matrix-report")
+    studio.add_argument("--approvals")
     studio.add_argument("--title", default="RepoShield Studio")
     studio.set_defaults(func=cmd_studio)
 

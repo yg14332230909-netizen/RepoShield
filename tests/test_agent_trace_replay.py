@@ -5,6 +5,7 @@ from pathlib import Path
 
 from reposhield.instruction_ir import InstructionBuilder, InstructionLowerer
 from reposhield.plugins import ToolParserRegistry
+from reposhield.trace_matrix import run_trace_matrix
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "agent_traces"
 
@@ -41,3 +42,12 @@ def test_realistic_agent_trace_fixtures_replay_to_action_ir(tmp_path: Path):
         assert action.metadata["trace_id"] == event["trace_id"]
 
     assert seen_agents == {"aider", "cline_like", "openhands"}
+
+
+def test_agent_trace_compatibility_matrix_report(tmp_path: Path):
+    report = run_trace_matrix(FIXTURE_DIR, tmp_path / "matrix")
+    assert report["metrics"]["trace_count"] == 3
+    assert report["metrics"]["agent_count"] == 3
+    assert report["metrics"]["pass_rate"] == 1.0
+    assert (tmp_path / "matrix" / "trace_matrix_report.json").exists()
+    assert (tmp_path / "matrix" / "trace_matrix_report.html").exists()

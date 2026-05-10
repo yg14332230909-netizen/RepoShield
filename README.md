@@ -26,7 +26,7 @@ Approximate maturity:
 Latest local verification:
 
 ```text
-pytest -q                                    -> 78 passed
+pytest -q                                    -> 83 passed
 python -m compileall -q src tests            -> passed
 ruff check src tests                         -> passed
 ```
@@ -41,6 +41,34 @@ python -m pip install -e ".[test]"
 pytest -q
 ruff check src tests
 python -m compileall -q src tests
+```
+
+## Paper Demo Workflow
+
+Run the agent trace compatibility matrix:
+
+```bash
+reposhield trace-matrix \
+  --traces tests/fixtures/agent_traces \
+  --output reports/trace_matrix
+```
+
+Validate a policy pack and start the local approval control plane:
+
+```bash
+reposhield policy-validate --policy-pack policies/policy_pack_gateway.yaml
+reposhield approval-api-start --store .reposhield/gateway_approvals.jsonl --host 127.0.0.1 --port 8776
+```
+
+Render Studio Lite with audit, approval, benchmark, and trace-matrix evidence:
+
+```bash
+reposhield studio \
+  --audit .reposhield/gateway_audit.jsonl \
+  --approvals .reposhield/gateway_approvals.jsonl \
+  --trace-matrix-report reports/trace_matrix/trace_matrix_report.json \
+  --bench-report reports/gateway_bench/gateway_bench_report.json \
+  --output reports/studio.html
 ```
 
 ## What It Protects
