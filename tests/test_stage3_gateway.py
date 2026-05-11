@@ -348,11 +348,15 @@ def test_tool_parser_registry_understands_common_agent_aliases():
     registry = ToolParserRegistry()
     assert "codex" in registry.agents()
     assert "claude_code" in registry.agents()
+    assert "openclaw" in registry.agents()
     parsed = registry.parse({"type": "tool_use", "name": "Bash", "input": {"command": "npm test"}}, agent_type="claude_code")
     assert parsed.canonical_tool == "bash_exec"
     assert parsed.raw_action == "npm test"
     cline = registry.parse({"toolName": "read_file", "toolInput": {"path": "README.md"}}, agent_type="cline")
     assert cline.canonical_tool == "read_file"
+    openclaw = registry.parse({"tool": "execute_command", "params": {"command": "npm test"}}, agent_type="openclaw")
+    assert openclaw.canonical_tool == "bash_exec"
+    assert openclaw.raw_action == "npm test"
 
 
 def test_taint_registry_inherits_untrusted_file_write():

@@ -9,6 +9,7 @@ from .tool_parser import (
     ClineToolParser,
     GenericJSONToolParser,
     OpenAIToolParser,
+    OpenClawToolParser,
     OpenHandsToolParser,
     ToolParser,
     ToolParseResult,
@@ -26,6 +27,7 @@ class ToolParserRegistry:
             "claude_code": AnthropicToolUseParser(),
             "anthropic": AnthropicToolUseParser(),
             "aider": AiderToolParser(),
+            "openclaw": OpenClawToolParser(),
             "openhands": OpenHandsToolParser(),
         }
         self.default_agent = "generic_json"

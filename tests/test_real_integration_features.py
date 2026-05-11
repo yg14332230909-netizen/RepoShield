@@ -25,6 +25,16 @@ def test_init_agent_generates_config_and_shims(tmp_path: Path):
     assert (repo / ".reposhield" / "agent-instructions.md").exists()
 
 
+def test_init_agent_accepts_openclaw_profile(tmp_path: Path):
+    repo = make_repo(tmp_path)
+    result = init_agent(repo, tmp_path / "reposhield", agent="openclaw", task="fix login", force=True)
+    assert result["agent"] == "openclaw"
+    config = (repo / ".reposhield" / "config.json").read_text(encoding="utf-8")
+    assert '"agent": "openclaw"' in config
+    instructions = (repo / ".reposhield" / "agent-instructions.md").read_text(encoding="utf-8")
+    assert "http://127.0.0.1:8765/v1" in instructions
+
+
 def test_file_guard_blocks_untrusted_ci_edit(tmp_path: Path):
     repo = make_repo(tmp_path)
     cp = RepoShieldControlPlane(repo, audit_path=tmp_path / "audit.jsonl")

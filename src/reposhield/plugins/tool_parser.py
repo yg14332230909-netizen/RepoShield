@@ -131,5 +131,22 @@ class OpenHandsToolParser(GenericJSONToolParser):
         return super().parse(tool_call)
 
 
+class OpenClawToolParser(GenericJSONToolParser):
+    """Parser for OpenClaw-style agent tool records.
+
+    OpenClaw integrations are expected to work best through the
+    OpenAI-compatible gateway, but this parser also accepts common direct
+    adapter shapes so RepoShield can sit at the tool boundary when needed.
+    """
+
+    def parse(self, tool_call: dict[str, Any]) -> ToolParseResult:
+        if "tool" in tool_call and "arguments" not in tool_call and "input" not in tool_call:
+            tool_call = {"name": tool_call.get("tool"), "arguments": tool_call.get("params") or tool_call.get("args") or {}}
+        if "function_call" in tool_call and "function" not in tool_call:
+            fn = tool_call.get("function_call") or {}
+            tool_call = {"name": fn.get("name"), "arguments": fn.get("arguments") or fn.get("params") or {}}
+        return super().parse(tool_call)
+
+
 class AiderToolParser(GenericJSONToolParser):
     """Parser for aider transcript-derived JSON action records."""

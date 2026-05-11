@@ -417,7 +417,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     init = sub.add_parser("init-agent", help="Generate RepoShield agent integration config, shims, and instructions")
     init.add_argument("--repo", required=True)
-    init.add_argument("--agent", choices=["generic", "cline", "codex", "openhands"], default="generic")
+    init.add_argument("--agent", choices=["generic", "cline", "codex", "openclaw", "openhands"], default="generic")
     init.add_argument("--task", default="general coding task")
     init.add_argument("--reposhield-home")
     init.add_argument("--force", action="store_true")

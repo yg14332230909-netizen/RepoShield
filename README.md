@@ -26,7 +26,7 @@ Approximate maturity:
 Latest local verification:
 
 ```text
-pytest -q                                    -> 83 passed
+pytest -q                                    -> 84 passed
 python -m compileall -q src tests            -> passed
 ruff check src tests                         -> passed
 ```
@@ -93,7 +93,7 @@ It is designed to catch risks such as:
 - per-request `TaskContract`, `ContextGraph`, and `SecretSentry` isolation
 - unified decision semantics: `allow`, `allow_in_sandbox`, `sandbox_then_approval`, `block`
 - `guard_action_ir()` to govern already-lowered structured actions
-- OpenAI, Anthropic, Cline, OpenHands, and Aider parser mapping
+- OpenAI, Anthropic, Cline, OpenClaw, OpenHands, and Aider parser mapping
 - transcript provenance with `SOURCE:`, JSONL actions, and `source_ids=...`
 - strict transcript mode that fail-closes unknown executable-looking lines
 - compound command lowering and per-part risk aggregation
@@ -140,6 +140,20 @@ Point your agent to:
 base_url = http://127.0.0.1:8765/v1
 api_key  = reposhield-local
 model    = gpt-4.1
+```
+
+This is intentionally host-neutral: any agent runtime that can use an
+OpenAI-compatible `base_url`, call MCP tools, or route shell/file operations
+through a wrapper can sit behind RepoShield. That includes Cline, Codex-like
+clients, OpenClaw, OpenHands, Aider-style CLIs, and custom internal agents.
+
+For repo-local setup, generate shims and instructions for a specific host:
+
+```bash
+PYTHONPATH=src python -m reposhield init-agent \
+  --repo ./your-repo \
+  --agent openclaw \
+  --task "fix login button and run tests"
 ```
 
 For agents that can wrap their shell tool:
