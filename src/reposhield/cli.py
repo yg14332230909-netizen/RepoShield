@@ -22,6 +22,7 @@ from .dashboard import render_dashboard
 from .demo import run_demo
 from .gateway import RepoShieldGateway, make_upstream, serve_gateway, simulate_gateway_request
 from .gateway_bench import generate_stage3_gateway_samples, run_gateway_suite
+from .plugins import ToolIntrospector
 from .policy_runtime import load_policy_pack, validate_policy_pack
 from .replay import verify_bundle
 from .report import render_incident_html, render_suite_html
@@ -126,6 +127,30 @@ def cmd_trace_matrix(args: argparse.Namespace) -> int:
     report = run_trace_matrix(args.traces, args.output)
     _print_json(report)
     return 0 if report.get("metrics", {}).get("pass_rate", 0) >= args.min_pass_rate else 3
+
+
+def cmd_tool_introspect(args: argparse.Namespace) -> int:
+    data = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    introspector = ToolIntrospector()
+    if args.format == "openai":
+        tools = data.get("tools", data) if isinstance(data, dict) else data
+        if not isinstance(tools, list):
+            raise ValueError("openai format expects a tools array or an object with a tools array")
+        mappings = introspector.from_openai_tools(tools, source=str(args.input))
+    elif args.format == "mcp":
+        if not isinstance(data, dict):
+            raise ValueError("mcp format expects a manifest object")
+        mappings = introspector.from_mcp_manifest(data, source=str(args.input))
+    elif args.format == "agent-config":
+        if not isinstance(data, dict):
+            raise ValueError("agent-config format expects a config object")
+        mappings = introspector.from_agent_config(data, source=str(args.input))
+    else:
+        if not isinstance(data, dict) or not args.name:
+            raise ValueError("json-schema format expects --name and a schema object")
+        mappings = [introspector.from_json_schema(args.name, data, source=str(args.input))]
+    _print_json({"mappings": [asdict(m) for m in mappings]})
+    return 0
 
 
 def cmd_run_agent(args: argparse.Namespace) -> int:
@@ -391,6 +416,12 @@ def build_parser() -> argparse.ArgumentParser:
     tm.add_argument("--output", required=True)
     tm.add_argument("--min-pass-rate", type=float, default=1.0)
     tm.set_defaults(func=cmd_trace_matrix)
+
+    tool_introspect = sub.add_parser("tool-introspect", help="Infer RepoShield canonical tool mappings from tool schemas")
+    tool_introspect.add_argument("--input", required=True)
+    tool_introspect.add_argument("--format", choices=["openai", "mcp", "agent-config", "json-schema"], default="openai")
+    tool_introspect.add_argument("--name", help="Tool name for --format json-schema")
+    tool_introspect.set_defaults(func=cmd_tool_introspect)
 
     exec_guard = sub.add_parser("exec-guard", help="Guard and optionally execute a real shell-tool command")
     exec_guard.add_argument("--repo", required=True)

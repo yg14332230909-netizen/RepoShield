@@ -62,6 +62,14 @@ class RepoShieldGateway:
         cp.build_contract(str(request.get("task") or latest_user_text(messages) or "general code maintenance task"))
         contexts = self._ingest_contexts(request, cp)
         source_ids = [c["source_id"] for c in contexts]
+        tool_mappings = self._introspect_request_tools(request)
+        if tool_mappings:
+            cp.audit.append(
+                "tool_mappings_introspected",
+                {"trace_id": trace.trace_id, "turn_id": turn_id, "mapping_count": len(tool_mappings), "tools": [m.tool_name for m in tool_mappings]},
+                task_id=cp.contract.task_id if cp.contract else None,
+                actor="tool_introspector",
+            )
 
         upstream_contexts = [{"source_id": sid, "content": c.get("content", "")} for sid, c in zip(source_ids, contexts)]
         if request.get("stream") and hasattr(self.upstream, "complete_streaming"):
@@ -99,6 +107,20 @@ class RepoShieldGateway:
         result = {"trace_id": trace.trace_id, "turn_id": turn_id, "response": response, "instructions": [instruction_to_dict(i) for i in instructions], "guarded_results": guarded, "audit_log": str(cp.audit.log_path)}
         cp.audit.append("gateway_response", {"trace_id": trace.trace_id, "turn_id": turn_id, "blocked_count": sum(1 for g in guarded if g.get("runtime", {}).get("effective_decision") in {"block", "quarantine", "sandbox_then_approval"}), "response_hash": sha256_json(response)}, task_id=cp.contract.task_id if cp.contract else None, actor="gateway")
         return result
+
+    def _introspect_request_tools(self, request: dict[str, Any]):
+        mappings = []
+        if isinstance(request.get("tools"), list):
+            mappings.extend(self.registry.introspect_openai_tools(request["tools"], source="gateway_request.tools"))
+        metadata = request.get("metadata") or {}
+        manifests = metadata.get("mcp_manifests") or request.get("mcp_manifests") or []
+        for manifest in manifests if isinstance(manifests, list) else [manifests]:
+            if isinstance(manifest, dict):
+                mappings.extend(self.registry.introspect_mcp_manifest(manifest, source="gateway_request.mcp_manifest"))
+        agent_config = metadata.get("agent_config") or request.get("agent_config")
+        if isinstance(agent_config, dict):
+            mappings.extend(self.registry.introspect_agent_config(agent_config, source="gateway_request.agent_config"))
+        return mappings
 
     def _ingest_contexts(self, request: dict[str, Any], cp: RepoShieldControlPlane) -> list[dict[str, Any]]:
         metadata = request.get("metadata") or {}

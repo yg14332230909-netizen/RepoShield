@@ -26,7 +26,7 @@ Approximate maturity:
 Latest local verification:
 
 ```text
-pytest -q                                    -> 84 passed
+pytest -q                                    -> 87 passed
 python -m compileall -q src tests            -> passed
 ruff check src tests                         -> passed
 ```
@@ -94,6 +94,7 @@ It is designed to catch risks such as:
 - unified decision semantics: `allow`, `allow_in_sandbox`, `sandbox_then_approval`, `block`
 - `guard_action_ir()` to govern already-lowered structured actions
 - OpenAI, Anthropic, Cline, OpenClaw, OpenHands, and Aider parser mapping
+- ToolIntrospector and ToolMappingRegistry for auto-mapping OpenAI tools, MCP manifests, agent configs, and JSON schemas
 - transcript provenance with `SOURCE:`, JSONL actions, and `source_ids=...`
 - strict transcript mode that fail-closes unknown executable-looking lines
 - compound command lowering and per-part risk aggregation
@@ -154,6 +155,19 @@ PYTHONPATH=src python -m reposhield init-agent \
   --repo ./your-repo \
   --agent openclaw \
   --task "fix login button and run tests"
+```
+
+When an agent exposes tool definitions, RepoShield can infer mappings instead
+of requiring a hand-written adapter. Gateway requests automatically inspect
+OpenAI-compatible `tools`, `metadata.mcp_manifests`, and
+`metadata.agent_config` before parsing returned tool calls.
+
+You can preview the inferred mapping:
+
+```bash
+PYTHONPATH=src python -m reposhield tool-introspect \
+  --input ./agent-tools.json \
+  --format openai
 ```
 
 For agents that can wrap their shell tool:
