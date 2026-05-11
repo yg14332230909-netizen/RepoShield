@@ -22,6 +22,7 @@ from .dashboard import render_dashboard
 from .demo import run_demo
 from .gateway import RepoShieldGateway, make_upstream, serve_gateway, simulate_gateway_request
 from .gateway_bench import generate_stage3_gateway_samples, run_gateway_suite
+from .openclaw_quickstart import generate_openclaw_quickstart
 from .plugins import ToolIntrospector
 from .policy_runtime import load_policy_pack, validate_policy_pack
 from .replay import verify_bundle
@@ -226,6 +227,20 @@ def cmd_file_guard(args: argparse.Namespace) -> int:
 
 def cmd_init_agent(args: argparse.Namespace) -> int:
     result = init_agent(args.repo, args.reposhield_home or Path.cwd(), agent=args.agent, task=args.task, force=args.force)
+    _print_json(result)
+    return 0
+
+
+def cmd_openclaw_quickstart(args: argparse.Namespace) -> int:
+    result = generate_openclaw_quickstart(
+        args.repo,
+        args.reposhield_home or Path.cwd(),
+        model=args.model,
+        host=args.host,
+        port=args.port,
+        upstream_base_url=args.upstream_base_url,
+        force=args.force,
+    )
     _print_json(result)
     return 0
 
@@ -453,6 +468,16 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--reposhield-home")
     init.add_argument("--force", action="store_true")
     init.set_defaults(func=cmd_init_agent)
+
+    openclaw = sub.add_parser("openclaw-quickstart", help="Generate one-click OpenClaw -> RepoShield startup files")
+    openclaw.add_argument("--repo", required=True)
+    openclaw.add_argument("--reposhield-home")
+    openclaw.add_argument("--model", default="gpt-4.1")
+    openclaw.add_argument("--host", default="127.0.0.1")
+    openclaw.add_argument("--port", type=int, default=8765)
+    openclaw.add_argument("--upstream-base-url", default="https://api.openai.com/v1")
+    openclaw.add_argument("--force", action="store_true")
+    openclaw.set_defaults(func=cmd_openclaw_quickstart)
 
     approvals = sub.add_parser("approvals", help="List, approve, or deny persisted approval requests")
     approvals.add_argument("--store", default=".reposhield/approvals.jsonl")
