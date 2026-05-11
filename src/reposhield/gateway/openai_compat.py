@@ -75,7 +75,7 @@ def responses_api_response(chat_response: dict[str, Any], trace_id: str) -> dict
     }
 
 
-def chat_completion_stream_events(response: dict[str, Any]) -> list[bytes]:
+def chat_completion_stream_events(response: dict[str, Any], *, include_role: bool = True) -> list[bytes]:
     """Encode a non-stream chat completion as OpenAI-compatible SSE events.
 
     The gateway still performs policy checks on a complete assistant message, then
@@ -86,15 +86,15 @@ def chat_completion_stream_events(response: dict[str, Any]) -> list[bytes]:
     finish_reason = ((response.get("choices") or [{}])[0].get("finish_reason") or "stop") if isinstance(response.get("choices"), list) else "stop"
     stream_id = str(response.get("id") or new_id("chatcmpl"))
     created = response.get("created") or utc_now()
-    events: list[dict[str, Any]] = [
-        {
+    events: list[dict[str, Any]] = []
+    if include_role:
+        events.append({
             "id": stream_id,
             "object": "chat.completion.chunk",
             "created": created,
             "model": model,
             "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
-        }
-    ]
+        })
 
     content = str(message.get("content") or "")
     for chunk in _content_chunks(content):

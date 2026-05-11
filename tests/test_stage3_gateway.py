@@ -279,6 +279,50 @@ def test_serve_gateway_rejects_missing_authorization(tmp_path: Path):
     assert any(e["event_type"] == "rejected_gateway_request" for e in events)
 
 
+def test_serve_gateway_streaming_sends_prelude_before_slow_upstream(tmp_path: Path):
+    repo = make_repo(tmp_path)
+
+    class SlowUpstream:
+        def complete_streaming(self, request, contexts=None):
+            time.sleep(0.5)
+            return {"role": "assistant", "content": "slow ok"}
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    thread = threading.Thread(
+        target=serve_gateway,
+        kwargs={
+            "repo_root": repo,
+            "host": "127.0.0.1",
+            "port": port,
+            "audit_path": tmp_path / "audit.jsonl",
+            "upstream": SlowUpstream(),
+            "stream_heartbeat_interval": 0.1,
+        },
+        daemon=True,
+    )
+    thread.start()
+    time.sleep(0.25)
+    req = Request(
+        f"http://127.0.0.1:{port}/v1/chat/completions",
+        data=json.dumps({"model": "slow-test", "stream": True, "messages": [{"role": "user", "content": "hello"}]}).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": "Bearer reposhield-local"},
+        method="POST",
+    )
+    start = time.monotonic()
+    with urlopen(req, timeout=5) as resp:
+        first_line = resp.readline()
+        elapsed = time.monotonic() - start
+        rest = resp.read().decode("utf-8")
+    assert elapsed < 0.4
+    assert first_line.startswith(b"data: ")
+    assert '"role": "assistant"' in first_line.decode("utf-8")
+    assert "reposhield heartbeat" in rest
+    assert "slow ok" in rest
+    assert "data: [DONE]" in rest
+
+
 def test_gateway_plus_guarded_tools_can_release_allow_in_sandbox_tool_calls(tmp_path: Path):
     repo = make_repo(tmp_path)
     gw = RepoShieldGateway(repo, audit_path=tmp_path / "audit.jsonl", release_mode="gateway_plus_guarded_tools")

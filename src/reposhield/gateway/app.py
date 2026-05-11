@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import json
 import os
+import queue
+import threading
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -173,6 +176,8 @@ def serve_gateway(
     gateway_api_key: str | None = None,
     release_mode: str = "gateway_only",
     unsafe_allow_disabled_policy: bool = False,
+    upstream: Any | None = None,
+    stream_heartbeat_interval: float = 10.0,
 ) -> None:
     """Start a tiny standard-library OpenAI-compatible HTTP server.
 
@@ -191,7 +196,7 @@ def serve_gateway(
         policy_config=policy_config,
         release_mode=release_mode,
         unsafe_allow_disabled_policy=unsafe_allow_disabled_policy,
-        upstream=make_upstream(
+        upstream=upstream or make_upstream(
             upstream_base_url=upstream_base_url,
             upstream_api_key=upstream_api_key,
             upstream_chat_path=upstream_chat_path,
@@ -204,6 +209,93 @@ def serve_gateway(
         print("RepoShield warning: gateway is listening on a non-loopback host; Authorization is required.", flush=True)
 
     class Handler(BaseHTTPRequestHandler):
+        def _write_sse_data(self, payload: dict[str, Any]) -> None:
+            self.wfile.write(f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8"))
+            self.wfile.flush()
+
+        def _write_sse_comment(self, comment: str) -> None:
+            self.wfile.write(f": {comment}\n\n".encode("utf-8"))
+            self.wfile.flush()
+
+        def _serve_streaming_chat_completion(self, request: dict[str, Any]) -> None:
+            trace_id = str(request.get("trace_id") or new_id("gw_trace"))
+            request["trace_id"] = trace_id
+            stream_id = new_id("chatcmpl")
+            created = int(time.time())
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "close")
+            self.send_header("X-RepoShield-Trace-Id", trace_id)
+            self.end_headers()
+            self._write_sse_data(
+                {
+                    "id": stream_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": str(request.get("model") or "reposhield/local"),
+                    "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
+                }
+            )
+
+            results: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=1)
+
+            def run_gateway() -> None:
+                try:
+                    results.put(("ok", gateway.handle_chat_completion(request)))
+                except Exception as exc:  # pragma: no cover - exercised through HTTP handler
+                    results.put(("error", exc))
+
+            worker = threading.Thread(target=run_gateway, daemon=True)
+            worker.start()
+            interval = max(float(stream_heartbeat_interval), 0.1)
+            while True:
+                try:
+                    status, value = results.get(timeout=interval)
+                    break
+                except queue.Empty:
+                    self._write_sse_comment("reposhield heartbeat")
+
+            if status == "error":
+                exc = value
+                gateway.cp.audit.append(
+                    "gateway_error",
+                    {"path": self.path, "error_type": type(exc).__name__, "detail": str(exc)},
+                    actor="gateway",
+                )
+                self._write_sse_data(
+                    {
+                        "id": stream_id,
+                        "object": "chat.completion.chunk",
+                        "created": created,
+                        "model": str(request.get("model") or "reposhield/local"),
+                        "choices": [{"index": 0, "delta": {"content": "RepoShield upstream request failed."}, "finish_reason": None}],
+                    }
+                )
+                self._write_sse_data(
+                    {
+                        "id": stream_id,
+                        "object": "chat.completion.chunk",
+                        "created": created,
+                        "model": str(request.get("model") or "reposhield/local"),
+                        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                    }
+                )
+                self.wfile.write(b"data: [DONE]\n\n")
+                self.wfile.flush()
+                self.close_connection = True
+                return
+
+            result = value
+            payload = result["response"]
+            if self.path == "/v1/responses":
+                payload = responses_api_response(payload, str(result["trace_id"]))
+            payload["reposhield"] = {"trace_id": result["trace_id"], "audit_log": result["audit_log"], "guarded_results": result["guarded_results"]}
+            for event in chat_completion_stream_events(payload, include_role=False):
+                self.wfile.write(event)
+                self.wfile.flush()
+            self.close_connection = True
+
         def do_POST(self) -> None:  # noqa: N802 - http.server API
             if self.path not in {"/v1/chat/completions", "/v1/responses"}:
                 self.send_response(404)
@@ -220,23 +312,14 @@ def serve_gateway(
             try:
                 body = self.rfile.read(int(self.headers.get("Content-Length", "0") or "0"))
                 request = json.loads(body.decode("utf-8") or "{}")
+                if request.get("stream"):
+                    self._serve_streaming_chat_completion(request)
+                    return
                 result = gateway.handle_chat_completion(request)
                 payload = result["response"]
                 if self.path == "/v1/responses":
                     payload = responses_api_response(payload, str(result["trace_id"]))
                 payload["reposhield"] = {"trace_id": result["trace_id"], "audit_log": result["audit_log"], "guarded_results": result["guarded_results"]}
-                if request.get("stream"):
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-                    self.send_header("Cache-Control", "no-cache")
-                    self.send_header("Connection", "keep-alive")
-                    self.send_header("X-RepoShield-Trace-Id", str(result["trace_id"]))
-                    self.send_header("X-RepoShield-Audit-Log", str(result["audit_log"]))
-                    self.end_headers()
-                    for event in chat_completion_stream_events(payload):
-                        self.wfile.write(event)
-                        self.wfile.flush()
-                    return
                 data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
