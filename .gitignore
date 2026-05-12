@@ -255,4 +255,8 @@ Thumbs.db
 
 # generated reports and local verification outputs
 reports/
+reports_tmp*/
 TEST_RUN_RESULT.txt
+
+# RepoShield local runtime state
+.reposhield/
