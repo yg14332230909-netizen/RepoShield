@@ -28,7 +28,10 @@ from .policy_runtime import load_policy_pack, validate_policy_pack
 from .replay import verify_bundle
 from .report import render_incident_html, render_suite_html
 from .sandbox import SANDBOX_PROFILES
-from .studio import render_studio_html
+from .studio import render_studio_html, serve_studio_pro
+from .studio.event_stream import StudioEventIndex
+from .studio.evidence_exporter import export_evidence
+from .studio.scenario_runner import run_scenario
 from .trace_matrix import run_trace_matrix
 
 
@@ -121,6 +124,33 @@ def cmd_incident_report(args: argparse.Namespace) -> int:
 def cmd_studio(args: argparse.Namespace) -> int:
     out = render_studio_html(args.audit, args.output, bench_report=args.bench_report, trace_matrix_report=args.trace_matrix_report, approvals_path=args.approvals, title=args.title)
     _print_json({"studio_report": str(out)})
+    return 0
+
+
+def cmd_studio_server(args: argparse.Namespace) -> int:
+    serve_studio_pro(
+        args.audit,
+        args.approvals,
+        repo_root=args.repo,
+        host=args.host,
+        port=args.port,
+        bench_report=args.bench_report,
+        api_key=args.api_key,
+        demo_mode=args.demo_mode,
+    )
+    return 0
+
+
+def cmd_studio_demo(args: argparse.Namespace) -> int:
+    result = run_scenario(args.scenario, repo_root=args.repo, audit_path=args.audit, workdir=args.workdir, policy_mode=args.policy_mode)
+    _print_json(result)
+    return 0
+
+
+def cmd_studio_export(args: argparse.Namespace) -> int:
+    index = StudioEventIndex(args.audit)
+    out = export_evidence(index, args.run_id, args.output)
+    _print_json({"evidence_bundle": str(out)})
     return 0
 
 
@@ -589,6 +619,31 @@ def build_parser() -> argparse.ArgumentParser:
     studio.add_argument("--approvals")
     studio.add_argument("--title", default="RepoShield Studio")
     studio.set_defaults(func=cmd_studio)
+
+    studio_server = sub.add_parser("studio-server", help="Start RepoShield Studio Pro realtime local dashboard")
+    studio_server.add_argument("--audit", default=".reposhield/gateway_audit.jsonl")
+    studio_server.add_argument("--approvals", default=".reposhield/gateway_approvals.jsonl")
+    studio_server.add_argument("--bench-report")
+    studio_server.add_argument("--repo", default=".")
+    studio_server.add_argument("--host", default="127.0.0.1")
+    studio_server.add_argument("--port", type=int, default=8780)
+    studio_server.add_argument("--api-key", help="Require Authorization: Bearer <key>. Defaults to REPOSHIELD_STUDIO_API_KEY or reposhield-local.")
+    studio_server.add_argument("--demo-mode", action="store_true")
+    studio_server.set_defaults(func=cmd_studio_server)
+
+    studio_demo = sub.add_parser("studio-demo", help="Run a deterministic Studio Pro normal/attack scenario")
+    studio_demo.add_argument("--scenario", required=True, choices=["normal-login-fix", "attack-secret-exfil", "attack-ci-poison", "attack-dependency-confusion"])
+    studio_demo.add_argument("--repo", default=".")
+    studio_demo.add_argument("--audit", default=".reposhield/gateway_audit.jsonl")
+    studio_demo.add_argument("--workdir")
+    studio_demo.add_argument("--policy-mode", choices=["enforce", "observe_only", "warn", "disabled"], default="enforce")
+    studio_demo.set_defaults(func=cmd_studio_demo)
+
+    studio_export = sub.add_parser("studio-export", help="Export a redacted Studio Pro evidence bundle for a run")
+    studio_export.add_argument("--audit", default=".reposhield/gateway_audit.jsonl")
+    studio_export.add_argument("--run-id", required=True)
+    studio_export.add_argument("--output", required=True)
+    studio_export.set_defaults(func=cmd_studio_export)
 
     dashboard = sub.add_parser("dashboard", help="Render a minimal local RepoShield dashboard HTML")
     dashboard.add_argument("--audit", required=True)

@@ -71,6 +71,42 @@ reposhield studio \
   --output reports/studio.html
 ```
 
+## Live Studio
+
+RepoShield Studio Pro is an interactive local dashboard for observing coding-agent
+runs behind RepoShield Gateway. It visualizes source provenance, InstructionIR,
+ActionIR, policy decisions, approval state, evidence graphs, benchmark summaries,
+and attack scenarios in real time.
+
+Start the local dashboard:
+
+```bash
+reposhield studio-server \
+  --audit .reposhield/gateway_audit.jsonl \
+  --approvals .reposhield/gateway_approvals.jsonl \
+  --bench-report reports/gateway_bench/gateway_bench_report.json \
+  --host 127.0.0.1 \
+  --port 8780 \
+  --demo-mode
+```
+
+Run a deterministic attack story for the dashboard:
+
+```bash
+reposhield studio-demo \
+  --scenario attack-dependency-confusion \
+  --audit .reposhield/gateway_audit.jsonl
+```
+
+Export a redacted evidence bundle:
+
+```bash
+reposhield studio-export \
+  --audit .reposhield/gateway_audit.jsonl \
+  --run-id run_attack_dependency_confusion \
+  --output reports/evidence/run_attack_dependency_confusion
+```
+
 ## What It Protects
 
 Coding agents can read repositories, edit files, run shell commands, install packages, call MCP tools, and sometimes touch CI/CD or release workflows. RepoShield protects that path from untrusted context such as GitHub issues, PR comments, README text, branch names, MCP output, memory, package scripts, and model-generated tool calls.
