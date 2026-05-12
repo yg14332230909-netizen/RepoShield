@@ -7,7 +7,7 @@ function decisionOf(event: StudioEvent): string {
 
 export function DecisionStream({ events }: { events: StudioEvent[] }) {
   const decisions = events.filter((event) => ["policy_decision", "policy_runtime", "gateway_response"].includes(event.type));
-  if (!decisions.length) return <div className="empty-state">No decisions yet.</div>;
+  if (!decisions.length) return <div className="empty-state">暂无决策事件。</div>;
   return (
     <div className="decision-stream">
       {decisions.map((event) => (

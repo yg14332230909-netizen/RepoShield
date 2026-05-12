@@ -116,6 +116,42 @@ h3 {
   white-space: nowrap;
 }
 
+.token-control {
+  position: relative;
+}
+
+.token-popover {
+  position: absolute;
+  right: 0;
+  top: 46px;
+  z-index: 10;
+  width: 300px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 14px 30px rgba(16, 24, 40, .18);
+}
+
+.token-popover label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.token-popover input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: var(--text);
+}
+
 .shell {
   display: grid;
   grid-template-columns: 300px minmax(620px, 1fr) 420px;
@@ -281,6 +317,22 @@ h3 {
   gap: 10px;
 }
 
+.bench-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.bench-filters label {
+  min-width: 190px;
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .event-card {
   min-height: 46px;
   display: grid;
@@ -293,6 +345,11 @@ h3 {
 
 .event-card:hover {
   border-color: var(--line-strong);
+}
+
+.event-card.active {
+  border-color: var(--red);
+  box-shadow: 0 0 0 2px rgba(180, 35, 24, .12);
 }
 
 .phase {
@@ -375,14 +432,119 @@ h3 {
   background: #f8fafc;
 }
 
+.sandbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.sandbox-grid > div,
+.hash-summary {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fbfcfe;
+}
+
+.sandbox-grid b,
+.hash-summary b {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.sandbox-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.sandbox-columns h4 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.hash-summary {
+  margin: 10px 0;
+  overflow-wrap: anywhere;
+}
+
 .scenario-grid {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   margin-bottom: 18px;
 }
 
+.storyboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.story-step {
+  min-height: 92px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+}
+
+.story-step b {
+  font-size: 16px;
+}
+
+.story-step.normal {
+  background: var(--green-bg);
+  border-color: #abefc6;
+}
+
+.story-step.warning {
+  background: var(--amber-bg);
+  border-color: #fedf89;
+}
+
+.story-step.critical {
+  background: var(--red-bg);
+  border-color: #fecdca;
+}
+
+.story-step.info {
+  background: var(--blue-bg);
+  border-color: #b2ddff;
+}
+
 .scenario-card {
   display: grid;
   gap: 8px;
+}
+
+.scenario-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.attack-input {
+  max-height: 120px;
+}
+
+.scenario-expect {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 6px 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fbfcfe;
+}
+
+.scenario-expect span {
+  color: var(--muted);
 }
 
 .comparator {
@@ -396,6 +558,36 @@ h3 {
   border-radius: 8px;
   padding: 12px;
   background: #fbfcfe;
+}
+
+.diff-table {
+  display: grid;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.diff-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(110px, .5fr) minmax(110px, .5fr);
+}
+
+.diff-row > * {
+  padding: 10px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.diff-row > *:last-child {
+  border-right: 0;
+}
+
+.diff-head {
+  background: #f8fafc;
+  color: var(--muted);
+  font-weight: 800;
 }
 
 .trace-graph {
@@ -460,6 +652,19 @@ h3 {
 .flow-node.info {
   background: var(--blue-bg);
   border-color: #b2ddff;
+}
+
+.flow-node.selected {
+  outline: 3px solid rgba(180, 35, 24, .32);
+  border-color: var(--red);
+}
+
+.flow-node.connected {
+  box-shadow: 0 0 0 2px rgba(180, 35, 24, .12);
+}
+
+.flow-node.dimmed {
+  opacity: .34;
 }
 
 .react-flow__edge-textbg {

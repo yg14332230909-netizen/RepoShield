@@ -82,3 +82,12 @@ def test_studio_static_frontend_is_available():
     html = _studio_html()
     assert "RepoShield Studio Pro" in html
     assert "/assets/" in html or "/src/main.tsx" in html
+
+
+def test_studio_frontend_bundle_does_not_embed_canary_secret():
+    root = _static_root()
+    if not (root / "assets").exists():
+        return
+    combined = "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in (root / "assets").glob("*.js"))
+    assert "npm_REPOSHIELD_STAGE3_CANARY" not in combined
+    assert "RS_CANARY_NPM_TOKEN" not in combined

@@ -26,9 +26,10 @@ Approximate maturity:
 Latest local verification:
 
 ```text
-pytest -q                                    -> 87 passed
+pytest -q --basetemp=.pytest_tmp_run         -> 94 passed
 python -m compileall -q src tests            -> passed
 ruff check src tests                         -> passed
+cd web/studio && npm run build               -> passed
 ```
 
 ## Reproducible Verification
@@ -78,6 +79,18 @@ runs behind RepoShield Gateway. It visualizes source provenance, InstructionIR,
 ActionIR, policy decisions, approval state, evidence graphs, benchmark summaries,
 and attack scenarios in real time.
 
+Studio Pro includes:
+
+- Run Cockpit with live timeline and decision stream
+- Attack Lab with normal/attack storyboards and comparator metrics
+- React Flow trace graph for source -> action -> decision -> evidence paths
+- Action detail drawer with ActionIR, source trust, matched rules, rule trace, and evidence refs
+- Policy Debugger with rule condition matrix
+- Approval Center with action-hash-bound grant/deny confirmation
+- Sandbox Evidence panels for process tree, network intent, file diff, and redacted trace
+- Bench & Report filters for suite and security result
+- Redacted evidence bundle export
+
 Start the local dashboard:
 
 ```bash
@@ -96,6 +109,23 @@ Run a deterministic attack story for the dashboard:
 reposhield studio-demo \
   --scenario attack-dependency-confusion \
   --audit .reposhield/gateway_audit.jsonl
+```
+
+Recommended demo walkthrough:
+
+```bash
+# 1. Start Studio Pro
+reposhield studio-server \
+  --audit .reposhield/gateway_audit.jsonl \
+  --approvals .reposhield/gateway_approvals.jsonl \
+  --host 127.0.0.1 \
+  --port 8780 \
+  --demo-mode
+
+# 2. Open http://127.0.0.1:8780
+# 3. In Attack Lab, run normal-login-fix and attack-dependency-confusion
+# 4. Open Trace Graph and click the action node
+# 5. Inspect Action Detail, Policy Debugger, Sandbox Evidence, and Approval Center
 ```
 
 Export a redacted evidence bundle:

@@ -9,6 +9,7 @@ export function useRunStore() {
   const [events, setEvents] = useState<StudioEvent[]>([]);
   const [graph, setGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
   const [actionDetail, setActionDetail] = useState<ActionDetail | null>(null);
+  const [selectedActionId, setSelectedActionId] = useState<string>("");
   const [scenarios, setScenarios] = useState<ScenarioSpec[]>([]);
   const [approvals, setApprovals] = useState<ApprovalEvent[]>([]);
   const [bench, setBench] = useState<BenchReport>({ metrics: {}, samples: [] });
@@ -46,6 +47,7 @@ export function useRunStore() {
   }, []);
 
   const inspectAction = useCallback(async (actionId: string) => {
+    setSelectedActionId(actionId);
     setActionDetail(await studioApi.action(actionId));
   }, []);
 
@@ -93,6 +95,7 @@ export function useRunStore() {
     events,
     graph,
     actionDetail,
+    selectedActionId,
     scenarios,
     approvals,
     bench,

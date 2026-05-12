@@ -11,7 +11,7 @@ function statusFor(request: ApprovalEvent, events: ApprovalEvent[]): "pending" |
 
 export function ApprovalCenter({ events, onGrant, onDeny }: { events: ApprovalEvent[]; onGrant: (approvalId: string, actionHash: string) => void; onDeny: (approvalId: string) => void }) {
   const requests = events.filter((event) => event.event_type === "request").reverse();
-  if (!requests.length) return <div className="empty-state">No approval requests.</div>;
+  if (!requests.length) return <div className="empty-state">暂无审批请求。</div>;
   return (
     <div className="approval-list">
       {requests.map((event) => {
@@ -28,12 +28,25 @@ export function ApprovalCenter({ events, onGrant, onDeny }: { events: ApprovalEv
               <span>action_hash</span><span>{actionHash}</span>
               <span>source</span><span>{JSON.stringify(payload.source_influence || [])}</span>
             </div>
+            <div className="hash-summary">
+              <b>哈希绑定摘要</b>
+              <span>task_id={String(payload.task_id || "n/a")}</span>
+              <span>action_id={String(payload.action_id || "n/a")}</span>
+              <span>plan_hash={String(payload.plan_hash || "n/a")}</span>
+              <span>affected_assets={JSON.stringify(payload.affected_assets || [])}</span>
+            </div>
             {status === "pending" ? (
               <>
-                <button className="primary" onClick={() => onGrant(approvalId, actionHash)}>Grant sandbox-only</button>
-                <button className="danger" onClick={() => onDeny(approvalId)}>Deny</button>
+                <button className="primary" onClick={() => {
+                  const ok = window.confirm(`确认仅以 sandbox-only 方式批准这个精确动作吗？\n\n${String(payload.human_readable_summary || approvalId)}\n\naction_hash=${actionHash}`);
+                  if (ok) onGrant(approvalId, actionHash);
+                }}>批准 sandbox-only</button>
+                <button className="danger" onClick={() => {
+                  const ok = window.confirm(`确认拒绝审批请求 ${approvalId} 吗？`);
+                  if (ok) onDeny(approvalId);
+                }}>拒绝</button>
               </>
-            ) : <div className="muted">Finalized in ApprovalStore as {status}.</div>}
+            ) : <div className="muted">该请求已在 ApprovalStore 中结束，状态为 {status}。</div>}
           </div>
         );
       })}

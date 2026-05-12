@@ -1,37 +1,80 @@
 import type { RunSummary, ScenarioSpec } from "../types";
 import { DecisionBadge } from "../components/DecisionBadge";
 
-function runCard(run?: RunSummary) {
-  if (!run) return <div className="empty-state">Run this side of the story first.</div>;
+function latestRunFor(scenarioId: string, runs: RunSummary[]): RunSummary | undefined {
+  return runs.find((run) => run.demo_scenario_id === scenarioId);
+}
+
+function runCard(run?: RunSummary, onOpenRun?: (runId: string) => void) {
+  if (!run) return <div className="empty-state">请先运行这一侧的场景。</div>;
   return (
-    <div className="compare-column">
+    <button className="compare-column" onClick={() => onOpenRun?.(run.run_id)}>
       <b>{run.demo_scenario_id || run.run_id}</b>
       <div className="muted">{run.event_count} events · {run.action_count} actions · {run.agent_name}</div>
       <DecisionBadge label={run.latest_decision || "observing"} severity={run.blocked_count ? "critical" : "normal"} />
+    </button>
+  );
+}
+
+function diffRow(label: string, normal?: RunSummary, attack?: RunSummary, pick: (run: RunSummary) => string | number = (run) => run.event_count) {
+  return (
+    <div className="diff-row">
+      <span>{label}</span>
+      <b>{normal ? pick(normal) : "n/a"}</b>
+      <b>{attack ? pick(attack) : "n/a"}</b>
     </div>
   );
 }
 
-export function AttackLab({ scenarios, runs, onRunScenario, onOpenRun }: { scenarios: ScenarioSpec[]; runs: RunSummary[]; onRunScenario: (scenarioId: string) => void; onOpenRun: (runId: string) => void }) {
+export function AttackLab({ scenarios, runs, onRunScenario, onOpenRun }: { scenarios: ScenarioSpec[]; runs: RunSummary[]; onRunScenario: (scenarioId: string) => void | Promise<void>; onOpenRun: (runId: string) => void }) {
   const normal = runs.find((run) => run.demo_scenario_id === "normal-login-fix");
   const attack = runs.find((run) => run.demo_scenario_id && run.demo_scenario_id !== "normal-login-fix");
+  async function runPair(scenarioId: string) {
+    await onRunScenario("normal-login-fix");
+    if (scenarioId !== "normal-login-fix") await onRunScenario(scenarioId);
+  }
   return (
     <>
+      <div className="storyboard">
+        <div className="story-step normal"><b>1. 正常任务</b><span>构建任务契约，允许源码编辑，将测试执行约束到沙箱。</span></div>
+        <div className="story-step warning"><b>2. 低可信上下文</b><span>Issue、README、MCP 或 memory 内容会被标记为低可信来源。</span></div>
+        <div className="story-step critical"><b>3. 危险动作</b><span>模型提出依赖安装、读取 secret、修改 CI 或网络外传等动作。</span></div>
+        <div className="story-step info"><b>4. RepoShield 决策</b><span>通过 ActionIR、命中规则和证据引用解释为什么阻断。</span></div>
+      </div>
       <div className="scenario-grid">
-        {scenarios.map((scenario) => (
+        {scenarios.map((scenario) => {
+          const latest = latestRunFor(scenario.id, runs);
+          return (
           <div className="scenario-card" key={scenario.id}>
-            <DecisionBadge label={scenario.kind} severity={scenario.kind === "attack" ? "critical" : "normal"} />
+            <div className="scenario-card-head">
+              <DecisionBadge label={scenario.kind} severity={scenario.kind === "attack" ? "critical" : "normal"} />
+              {latest ? <DecisionBadge label={latest.latest_decision || "已观测"} severity={latest.blocked_count ? "critical" : "normal"} /> : <DecisionBadge label="未运行" severity="info" />}
+            </div>
             <h3>{scenario.name}</h3>
             <p className="muted">{scenario.description}</p>
-            <div className="muted">Expected: {scenario.dangerous_action} {"->"} {scenario.expected_decision}</div>
-            <button className="primary" onClick={() => onRunScenario(scenario.id)}>Run scenario</button>
+            {scenario.attack_body ? <pre className="attack-input">{scenario.attack_body}</pre> : <div className="empty-state">正常场景，没有攻击载荷。</div>}
+            <div className="scenario-expect">
+              <span>危险动作</span><b>{scenario.dangerous_action}</b>
+              <span>预期决策</span><b>{scenario.expected_decision}</b>
+            </div>
+            <button className="primary" onClick={() => onRunScenario(scenario.id)}>运行场景</button>
+            <button onClick={() => runPair(scenario.id)}>运行正常场景并对比</button>
+            {latest ? <button onClick={() => onOpenRun(latest.run_id)}>打开最近运行</button> : null}
           </div>
-        ))}
+        );})}
       </div>
-      <h3>Normal / Attack Comparator</h3>
+      <h3>正常 / 攻击对比</h3>
       <div className="comparator">
-        <button onClick={() => normal && onOpenRun(normal.run_id)}>{runCard(normal)}</button>
-        <button onClick={() => attack && onOpenRun(attack.run_id)}>{runCard(attack)}</button>
+        {runCard(normal, onOpenRun)}
+        {runCard(attack, onOpenRun)}
+      </div>
+      <div className="diff-table">
+        <div className="diff-row diff-head"><span>信号</span><b>正常</b><b>攻击</b></div>
+        {diffRow("事件数", normal, attack, (run) => run.event_count)}
+        {diffRow("动作数", normal, attack, (run) => run.action_count)}
+        {diffRow("阻断数", normal, attack, (run) => run.blocked_count)}
+        {diffRow("审批数", normal, attack, (run) => run.approval_count)}
+        {diffRow("最新决策", normal, attack, (run) => run.latest_decision || "observing")}
       </div>
     </>
   );

@@ -12,14 +12,35 @@ function nodePosition(node: GraphNode, index: number, phaseCounts: Map<string, n
   return { x: phaseIndex * 245, y: count * 112 + (index % 2) * 10 };
 }
 
-function toFlowNodes(nodes: GraphNode[], onInspectAction: (actionId: string) => void): Node[] {
+function connectedTo(activeNodeId: string, edges: GraphEdge[]): Set<string> {
+  if (!activeNodeId) return new Set();
+  const connected = new Set([activeNodeId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const edge of edges) {
+      if (connected.has(edge.from) && !connected.has(edge.to)) {
+        connected.add(edge.to);
+        changed = true;
+      }
+      if (connected.has(edge.to) && !connected.has(edge.from)) {
+        connected.add(edge.from);
+        changed = true;
+      }
+    }
+  }
+  return connected;
+}
+
+function toFlowNodes(nodes: GraphNode[], edges: GraphEdge[], activeActionId: string, onInspectAction: (actionId: string) => void): Node[] {
   const phaseCounts = new Map<string, number>();
+  const activePath = connectedTo(activeActionId, edges);
   return nodes.map((node, index) => ({
     id: node.id,
     position: nodePosition(node, index, phaseCounts),
     data: {
       label: (
-        <button className={`flow-node ${node.severity}`} onClick={() => node.phase === "action" && onInspectAction(node.id)}>
+        <button className={`flow-node ${node.severity} ${node.id === activeActionId ? "selected" : ""} ${activePath.has(node.id) ? "connected" : activeActionId ? "dimmed" : ""}`} onClick={() => node.phase === "action" && onInspectAction(node.id)}>
           <span>{node.phase} · {node.type}</span>
           <b>{node.label}</b>
         </button>
@@ -30,20 +51,25 @@ function toFlowNodes(nodes: GraphNode[], onInspectAction: (actionId: string) => 
   }));
 }
 
-function toFlowEdges(edges: GraphEdge[]): Edge[] {
+function toFlowEdges(edges: GraphEdge[], activeActionId: string): Edge[] {
+  const activePath = connectedTo(activeActionId, edges);
   return edges.slice(0, 220).map((edge, index) => ({
     id: `${edge.from}-${edge.to}-${edge.relation}-${index}`,
     source: edge.from,
     target: edge.to,
     label: edge.relation,
     animated: edge.relation === "influenced",
-    style: { stroke: edge.relation === "evidence" ? "#175cd3" : "#98a2b3", strokeWidth: edge.relation === "influenced" ? 2 : 1.4 },
+    style: {
+      stroke: activePath.has(edge.from) && activePath.has(edge.to) ? "#b42318" : edge.relation === "evidence" ? "#175cd3" : "#98a2b3",
+      strokeWidth: activePath.has(edge.from) && activePath.has(edge.to) ? 2.6 : edge.relation === "influenced" ? 2 : 1.4,
+      opacity: activeActionId && !(activePath.has(edge.from) && activePath.has(edge.to)) ? 0.28 : 1,
+    },
   }));
 }
 
-export function TraceGraph({ nodes, edges, onInspectAction }: { nodes: GraphNode[]; edges: GraphEdge[]; onInspectAction: (actionId: string) => void }) {
-  const flowNodes = toFlowNodes(nodes, onInspectAction);
-  const flowEdges = toFlowEdges(edges);
+export function TraceGraph({ nodes, edges, activeActionId, onInspectAction }: { nodes: GraphNode[]; edges: GraphEdge[]; activeActionId: string; onInspectAction: (actionId: string) => void }) {
+  const flowNodes = toFlowNodes(nodes, edges, activeActionId, onInspectAction);
+  const flowEdges = toFlowEdges(edges, activeActionId);
   const byPhase = phaseOrder.map((phase) => [phase, nodes.filter((node) => node.phase === phase).length] as const).filter(([, count]) => count);
   return (
     <>
@@ -57,7 +83,7 @@ export function TraceGraph({ nodes, edges, onInspectAction }: { nodes: GraphNode
             <Controls />
             <Background />
           </ReactFlow>
-        ) : <div className="empty-state">No graph nodes yet.</div>}
+        ) : <div className="empty-state">暂无图谱节点。</div>}
       </div>
       <pre className="json-block">{JSON.stringify(edges.slice(0, 80), null, 2)}</pre>
     </>

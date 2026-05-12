@@ -57,7 +57,7 @@ function shortId(id) {
 
 async function loadHealth() {
   const health = await api("/api/health");
-  $("health").textContent = `${health.version} | ${health.demo_mode ? "demo" : "live"}`;
+  $("health").textContent = `${health.version} | ${health.demo_mode ? "演示" : "实时"}`;
 }
 
 async function loadRuns() {
@@ -80,9 +80,9 @@ function renderRuns() {
     return `<button class="run-card ${run.run_id === state.selectedRun ? "active" : ""}" data-run="${escapeHtml(run.run_id)}">
       <b>${escapeHtml(run.demo_scenario_id || run.run_id)}</b>
       <div class="muted">${escapeHtml(run.event_count)} events · ${escapeHtml(run.action_count)} actions · ${escapeHtml(run.agent_name)}</div>
-      <div>${badge(run.latest_decision || "observing", severe)}</div>
+      <div>${badge(run.latest_decision || "观测中", severe)}</div>
     </button>`;
-  }).join("") || `<div class="empty-state">No run yet. Use Attack Lab to launch a deterministic scenario.</div>`;
+  }).join("") || `<div class="empty-state">暂无运行记录。可以在攻击演示中启动可复现场景。</div>`;
   document.querySelectorAll("[data-run]").forEach((el) => {
     el.addEventListener("click", () => selectRun(el.dataset.run));
   });
@@ -103,12 +103,12 @@ async function selectRun(runId) {
 
 function renderMetrics(run) {
   const metrics = [
-    ["Events", run.event_count || 0],
-    ["Actions", run.action_count || 0],
-    ["Blocked", run.blocked_count || 0],
-    ["Approvals", run.approval_count || 0],
-    ["Critical", run.critical_count || 0],
-    ["Latest", run.latest_decision || "observing"],
+    ["事件", run.event_count || 0],
+    ["动作", run.action_count || 0],
+    ["阻断", run.blocked_count || 0],
+    ["审批", run.approval_count || 0],
+    ["高危", run.critical_count || 0],
+    ["最新", run.latest_decision || "观测中"],
   ];
   $("metrics").innerHTML = metrics.map(([label, value]) => `<div class="metric"><span class="muted">${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`).join("");
 }
@@ -133,11 +133,11 @@ function renderTimeline() {
       </div>
       <div>
         <b>${escapeHtml(event.summary)}</b>
-        <div class="muted">${escapeHtml(event.type)} · ${escapeHtml(event.timestamp)}</div>
+        <div class="muted">${escapeHtml(event.type)} / ${escapeHtml(event.timestamp)}</div>
       </div>
       <div>${badge(decisionOf(event), event.severity)}</div>
     </div>`;
-  }).join("") || `<div class="empty-state">No events for this run.</div>`;
+  }).join("") || `<div class="empty-state">该运行暂无事件。</div>`;
   document.querySelectorAll(".event-card[data-action]").forEach((el) => {
     if (el.dataset.action) el.addEventListener("click", () => loadAction(el.dataset.action));
   });
@@ -152,7 +152,7 @@ function renderDecisionStream() {
       <b>${escapeHtml(event.summary)}</b>
       <div class="muted">${escapeHtml((event.payload?.reason_codes || []).slice(0, 3).join(", "))}</div>
     </div>`;
-  }).join("") || `<div class="empty-state">No decisions yet.</div>`;
+  }).join("") || `<div class="empty-state">暂无决策事件。</div>`;
 }
 
 async function loadAction(actionId) {
@@ -167,16 +167,16 @@ async function loadAction(actionId) {
     <div class="detail-section">
       <h3>${escapeHtml(action.semantic_action || actionId)}</h3>
       <div class="kv">
-        <span>decision</span><span>${badge(decision.decision || runtime.effective_decision || "unknown", severityForDecision(decision.decision || runtime.effective_decision))}</span>
-        <span>risk</span><span>${escapeHtml(action.risk || "unknown")}</span>
-        <span>policy</span><span>${escapeHtml(decision.policy_version || "n/a")}</span>
-        <span>source trust</span><span>${escapeHtml((detail.sources || []).map((s) => `${s.source_id}:${s.trust_level || s.trust || "unknown"}`).join(", ") || "n/a")}</span>
+        <span>决策</span><span>${badge(decision.decision || runtime.effective_decision || "未知", severityForDecision(decision.decision || runtime.effective_decision))}</span>
+        <span>风险</span><span>${escapeHtml(action.risk || "未知")}</span>
+        <span>策略</span><span>${escapeHtml(decision.policy_version || "n/a")}</span>
+        <span>来源信任</span><span>${escapeHtml((detail.sources || []).map((s) => `${s.source_id}:${s.trust_level || s.trust || "未知"}`).join(", ") || "n/a")}</span>
       </div>
     </div>
-    <div class="detail-section"><h3>Raw Action</h3><pre>${escapeHtml(action.raw_action || "")}</pre></div>
-    <div class="detail-section"><h3>Matched Rules</h3><pre>${escapeHtml(JSON.stringify(decision.matched_rules || [], null, 2))}</pre></div>
-    <div class="detail-section"><h3>Rule Trace</h3><pre>${escapeHtml(JSON.stringify(decision.rule_trace || [], null, 2))}</pre></div>
-    <div class="detail-section"><h3>Evidence Refs</h3><pre>${escapeHtml(JSON.stringify(decision.evidence_refs || [], null, 2))}</pre></div>
+    <div class="detail-section"><h3>原始动作</h3><pre>${escapeHtml(action.raw_action || "")}</pre></div>
+    <div class="detail-section"><h3>命中规则</h3><pre>${escapeHtml(JSON.stringify(decision.matched_rules || [], null, 2))}</pre></div>
+    <div class="detail-section"><h3>规则轨迹</h3><pre>${escapeHtml(JSON.stringify(decision.rule_trace || [], null, 2))}</pre></div>
+    <div class="detail-section"><h3>证据引用</h3><pre>${escapeHtml(JSON.stringify(decision.evidence_refs || [], null, 2))}</pre></div>
     <div class="detail-section"><h3>ActionIR</h3><pre>${escapeHtml(JSON.stringify(action, null, 2))}</pre></div>
   `;
 }
@@ -185,9 +185,9 @@ async function loadGraph() {
   if (!state.selectedRun) return;
   const graph = await api(`/api/runs/${encodeURIComponent(state.selectedRun)}/graph`);
   $("graph-body").innerHTML = (graph.nodes || []).map((node) => `<span class="graph-node ${escapeHtml(node.severity)}">
-    <b>${escapeHtml(node.phase)} · ${escapeHtml(node.type)}</b>
+    <b>${escapeHtml(node.phase)} / ${escapeHtml(node.type)}</b>
     ${escapeHtml(node.label)}
-  </span>`).join("") || `<div class="empty-state">No graph nodes yet.</div>`;
+  </span>`).join("") || `<div class="empty-state">暂无图谱节点。</div>`;
   $("graph-edges").textContent = JSON.stringify((graph.edges || []).slice(0, 160), null, 2);
 }
 
@@ -207,14 +207,14 @@ function renderPolicyDebugger() {
     }
   }
   $("policy-summary").innerHTML = [
-    ["Policy decisions", decisions.length],
-    ["Runtime events", runtimes.length],
-    ["Blocked", decisions.filter((d) => d.payload?.decision === "block").length],
-    ["Sandbox/approval", decisions.filter((d) => String(d.payload?.decision).includes("sandbox")).length],
-    ["Matched rules", ruleRows.length],
+    ["策略决策", decisions.length],
+    ["运行时事件", runtimes.length],
+    ["已阻断", decisions.filter((d) => d.payload?.decision === "block").length],
+    ["沙箱/审批", decisions.filter((d) => String(d.payload?.decision).includes("sandbox")).length],
+    ["命中规则", ruleRows.length],
   ].map(([label, value]) => `<div class="metric"><span class="muted">${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`).join("");
   const matrix = ruleRows.length ? `<div class="rule-matrix">
-    <div class="rule-matrix-head">Action</div><div class="rule-matrix-head">Rule</div><div class="rule-matrix-head">Category</div><div class="rule-matrix-head">Decision</div>
+    <div class="rule-matrix-head">动作</div><div class="rule-matrix-head">规则</div><div class="rule-matrix-head">类别</div><div class="rule-matrix-head">决策</div>
     ${ruleRows.map((row) => `<div>${escapeHtml(row.action)}</div><div>${escapeHtml(row.rule)}</div><div>${escapeHtml(row.category)}</div><div>${badge(row.decision, severityForDecision(row.decision))}</div>`).join("")}
   </div>` : "";
   $("policy-rules").innerHTML = matrix + decisions.map((event) => {
@@ -225,7 +225,7 @@ function renderPolicyDebugger() {
       <p class="muted">${escapeHtml(payload.explanation || "")}</p>
       <pre>${escapeHtml(JSON.stringify({ matched_rules: payload.matched_rules, evidence_refs: payload.evidence_refs, rule_trace: payload.rule_trace }, null, 2))}</pre>
     </div>`;
-  }).join("") || `<div class="empty-state">No policy decision events yet.</div>`;
+  }).join("") || `<div class="empty-state">暂无策略决策事件。</div>`;
 }
 
 async function loadScenarios() {
@@ -235,18 +235,18 @@ async function loadScenarios() {
     <div>${badge(scenario.kind, scenario.kind === "attack" ? "critical" : "normal")}</div>
     <h3>${escapeHtml(scenario.name)}</h3>
     <p class="muted">${escapeHtml(scenario.description)}</p>
-    <div class="muted">Expected: ${escapeHtml(scenario.dangerous_action)} -> ${escapeHtml(scenario.expected_decision)}</div>
-    <button class="primary" data-scenario="${escapeHtml(scenario.id)}">Run scenario</button>
+    <div class="muted">预期： ${escapeHtml(scenario.dangerous_action)} -> ${escapeHtml(scenario.expected_decision)}</div>
+    <button class="primary" data-scenario="${escapeHtml(scenario.id)}">运行场景</button>
   </div>`).join("");
   document.querySelectorAll("[data-scenario]").forEach((button) => {
     button.addEventListener("click", async () => {
-      button.textContent = "Running...";
+      button.textContent = "运行中...";
       try {
         const result = await api(`/api/scenarios/${encodeURIComponent(button.dataset.scenario)}/run`, { method: "POST", body: "{}" });
         await loadRuns();
         await selectRun(result.result.trace_id);
       } finally {
-        button.textContent = "Run scenario";
+        button.textContent = "运行场景";
       }
     });
   });
@@ -263,20 +263,20 @@ function renderComparator() {
   const attack = attackRuns[0];
   $("comparator").innerHTML = `
     <div class="compare-column">
-      <h3>Normal</h3>
-      ${normal ? runMini(normal) : `<div class="empty-state">Run normal-login-fix first.</div>`}
+      <h3>正常</h3>
+      ${normal ? runMini(normal) : `<div class="empty-state">请先运行 normal-login-fix。</div>`}
     </div>
     <div class="compare-column">
-      <h3>Attack</h3>
-      ${attack ? runMini(attack) : `<div class="empty-state">Run an attack scenario first.</div>`}
+      <h3>攻击</h3>
+      ${attack ? runMini(attack) : `<div class="empty-state">请先运行一个攻击场景。</div>`}
     </div>`;
 }
 
 function runMini(run) {
   return `<b>${escapeHtml(run.demo_scenario_id || run.run_id)}</b>
     <div class="muted">${escapeHtml(run.event_count)} events · ${escapeHtml(run.action_count)} actions</div>
-    <div>${badge(run.latest_decision || "observing", run.blocked_count ? "critical" : "normal")}</div>
-    <button data-run="${escapeHtml(run.run_id)}">Open run</button>`;
+    <div>${badge(run.latest_decision || "观测中", run.blocked_count ? "critical" : "normal")}</div>
+    <button data-run="${escapeHtml(run.run_id)}">打开运行</button>`;
 }
 
 async function loadApprovals() {
@@ -295,10 +295,10 @@ async function loadApprovals() {
         <span>action_hash</span><span>${escapeHtml(payload.action_hash)}</span>
         <span>sources</span><span>${escapeHtml(JSON.stringify(payload.source_influence || []))}</span>
       </div>
-      ${status === "pending" ? `<button class="primary" data-grant="${escapeHtml(payload.approval_request_id)}" data-hash="${escapeHtml(payload.action_hash)}">Grant sandbox-only</button>
-      <button class="danger" data-deny="${escapeHtml(payload.approval_request_id)}">Deny</button>` : `<div class="muted">Finalized in ApprovalStore as ${escapeHtml(status)}.</div>`}
+      ${status === "pending" ? `<button class="primary" data-grant="${escapeHtml(payload.approval_request_id)}" data-hash="${escapeHtml(payload.action_hash)}">批准 sandbox-only</button>
+      <button class="danger" data-deny="${escapeHtml(payload.approval_request_id)}">拒绝</button>` : `<div class="muted">已在 ApprovalStore 中完成：${escapeHtml(status)}。</div>`}
     </div>`;
-  }).join("") || `<div class="empty-state">No approval requests.</div>`;
+  }).join("") || `<div class="empty-state">暂无审批请求。</div>`;
   document.querySelectorAll("[data-grant]").forEach((button) => {
     button.addEventListener("click", async () => {
       await api(`/api/approvals/${encodeURIComponent(button.dataset.grant)}/grant`, { method: "POST", body: JSON.stringify({ action_hash: button.dataset.hash, constraints: ["sandbox_only", "no_network"], granted_by: "studio" }) });
@@ -343,24 +343,24 @@ function renderSandboxEvidence() {
       <div>${badge(p.recommended_decision || "sandbox", event.severity)}</div>
       <h3>${escapeHtml(p.command || event.summary)}</h3>
       <div class="kv">
-        <span>profile</span><span>${escapeHtml(p.sandbox_profile || "n/a")}</span>
-        <span>network</span><span>${escapeHtml((p.network_attempts || []).length)}</span>
-        <span>risk</span><span>${escapeHtml((p.risk_observed || []).join(", ") || "none")}</span>
+        <span>配置</span><span>${escapeHtml(p.sandbox_profile || "n/a")}</span>
+        <span>网络</span><span>${escapeHtml((p.network_attempts || []).length)}</span>
+        <span>风险</span><span>${escapeHtml((p.risk_observed || []).join(", ") || "none")}</span>
       </div>
       <pre>${escapeHtml(JSON.stringify(p, null, 2))}</pre>
     </div>`;
-  }).join("") || `<div class="empty-state">No sandbox preflight evidence for this run.</div>`;
+  }).join("") || `<div class="empty-state">该运行暂无沙箱预检证据。</div>`;
 }
 
 async function loadBench() {
   state.bench = await api("/api/bench/latest");
   const metrics = state.bench.metrics || {};
-  $("bench-metrics").innerHTML = Object.entries(metrics).map(([key, value]) => `<div class="metric"><span class="muted">${escapeHtml(key)}</span><b>${escapeHtml(value)}</b></div>`).join("") || `<div class="empty-state">No bench report attached.</div>`;
+  $("bench-metrics").innerHTML = Object.entries(metrics).map(([key, value]) => `<div class="metric"><span class="muted">${escapeHtml(key)}</span><b>${escapeHtml(value)}</b></div>`).join("") || `<div class="empty-state">未附加评测报告。</div>`;
   const samples = state.bench.samples || [];
   $("bench-samples").innerHTML = samples.slice(0, 80).map((sample) => `<div class="sample-row">
     <b>${escapeHtml(sample.sample_id || "")}</b>
-    ${badge(sample.security_ok ? "security ok" : "security fail", sample.security_ok ? "normal" : "critical")}
-    ${badge(sample.gateway_intercepted ? "intercepted" : "not intercepted", sample.gateway_intercepted ? "normal" : "warning")}
+    ${badge(sample.security_ok ? "安全通过" : "安全失败", sample.security_ok ? "normal" : "critical")}
+    ${badge(sample.gateway_已拦截 ? "已拦截" : "未拦截", sample.gateway_已拦截 ? "normal" : "warning")}
     <div class="muted">${escapeHtml(sample.suite || "")}</div>
   </div>`).join("");
 }
@@ -380,7 +380,7 @@ function connectStream(runId) {
 async function exportSelectedRun() {
   if (!state.selectedRun) return;
   const result = await api(`/api/export/evidence/${encodeURIComponent(state.selectedRun)}`);
-  alert(`Evidence exported to ${result.output}`);
+  alert(`证据包已导出到 ${result.output}`);
 }
 
 function wireTabs() {
@@ -412,6 +412,6 @@ async function refreshAll() {
 }
 
 boot().catch((error) => {
-  $("health").textContent = "error";
+  $("health").textContent = "错误";
   console.error(error);
 });
