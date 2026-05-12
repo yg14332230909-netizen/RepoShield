@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RepoShield Studio Pro</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div>
+        <h1>RepoShield Studio Pro</h1>
+        <p>Live run cockpit for gateway decisions, attack chains, approvals and evidence.</p>
+      </div>
+      <div class="topbar-actions">
+        <span id="health" class="status-pill">connecting</span>
+        <button id="refresh" class="icon-button" title="Refresh">Refresh</button>
+      </div>
+    </header>
+    <main class="shell">
+      <aside class="sidebar">
+        <div class="panel-head">
+          <h2>Runs</h2>
+          <span id="run-count" class="muted">0</span>
+        </div>
+        <div class="filter-row">
+          <select id="run-filter">
+            <option value="">All decisions</option>
+            <option value="block">Blocked</option>
+            <option value="sandbox">Sandbox</option>
+            <option value="allow">Allowed</option>
+          </select>
+        </div>
+        <div id="runs" class="run-list"></div>
+      </aside>
+
+      <section class="workspace">
+        <nav class="tabs" aria-label="Studio sections">
+          <button class="active" data-tab="cockpit">Run Cockpit</button>
+          <button data-tab="attack">Attack Lab</button>
+          <button data-tab="graph">Trace Graph</button>
+          <button data-tab="policy">Policy Debugger</button>
+          <button data-tab="approvals">Approval Center</button>
+          <button data-tab="sandbox">Sandbox Evidence</button>
+          <button data-tab="bench">Bench & Report</button>
+        </nav>
+
+        <section id="cockpit" class="tab-page active">
+          <div class="title-row">
+            <div>
+              <h2 id="selected-run">No run selected</h2>
+              <p class="muted">gateway_pre_call -> source_ingested -> instruction_ir -> action_parsed -> policy_decision -> response</p>
+            </div>
+            <button id="export-run">Export Evidence</button>
+          </div>
+          <div id="metrics" class="metric-grid"></div>
+          <div class="split">
+            <div>
+              <div class="panel-head inline">
+                <h3>Live Timeline</h3>
+                <label><input type="checkbox" id="critical-only"> Critical only</label>
+              </div>
+              <div id="timeline" class="timeline"></div>
+            </div>
+            <div>
+              <h3>Decision Stream</h3>
+              <div id="decision-stream" class="decision-stream"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="attack" class="tab-page">
+          <div class="title-row">
+            <div>
+              <h2>Attack Lab</h2>
+              <p class="muted">Run deterministic normal and attack stories, then compare source pollution, dangerous actions and final response.</p>
+            </div>
+          </div>
+          <div id="scenarios" class="scenario-grid"></div>
+          <h3>Normal / Attack Comparator</h3>
+          <div id="comparator" class="comparator"></div>
+        </section>
+
+        <section id="graph" class="tab-page">
+          <h2>Trace Graph</h2>
+          <p class="muted">Source -> instruction -> action -> decision -> evidence. Click an action in the timeline to inspect exact ActionIR.</p>
+          <div id="graph-body" class="trace-graph"></div>
+          <pre id="graph-edges" class="json-block"></pre>
+        </section>
+
+        <section id="policy" class="tab-page">
+          <h2>Policy Debugger</h2>
+          <div id="policy-summary" class="metric-grid"></div>
+          <div id="policy-rules" class="rule-stack"></div>
+        </section>
+
+        <section id="approvals" class="tab-page">
+          <h2>Approval Center</h2>
+          <p class="muted">Grant/deny operations write back to ApprovalStore and keep the action_hash binding visible.</p>
+          <div id="approval-list" class="approval-list"></div>
+        </section>
+
+        <section id="sandbox" class="tab-page">
+          <h2>Sandbox Evidence</h2>
+          <div id="sandbox-evidence" class="evidence-grid"></div>
+        </section>
+
+        <section id="bench" class="tab-page">
+          <h2>Bench & Report</h2>
+          <div id="bench-metrics" class="metric-grid"></div>
+          <div id="bench-samples" class="sample-table"></div>
+        </section>
+      </section>
+
+      <aside class="detail">
+        <div class="panel-head">
+          <h2>Action Detail</h2>
+          <span class="status-pill">redacted</span>
+        </div>
+        <div id="action-empty" class="empty-state">Select an action event to inspect raw_action, semantic_action, source trust, matched_rules, evidence_refs and response transform.</div>
+        <div id="action-detail" class="hidden"></div>
+      </aside>
+    </main>
+  </div>
+  <script type="module" src="/assets/app.js"></script>
+</body>
+</html>

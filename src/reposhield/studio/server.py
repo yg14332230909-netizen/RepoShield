@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import os
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -46,7 +47,10 @@ def serve_studio_pro(
             path = parsed.path
             query = parse_qs(parsed.query)
             if path == "/":
-                self._html(_index_html())
+                self._html(_studio_html())
+                return
+            if path.startswith("/assets/"):
+                self._static(path.removeprefix("/assets/"))
                 return
             if path == "/api/health":
                 self._json({"ok": True, "version": "studio.pro.v0.1", "audit_path": str(audit), "approvals_path": str(Path(approvals_path)), "demo_mode": demo_mode})
@@ -184,6 +188,25 @@ def serve_studio_pro(
             self.end_headers()
             self.wfile.write(data)
 
+        def _static(self, rel_path: str) -> None:
+            root = _static_root()
+            target = (root / "assets" / rel_path).resolve(strict=False)
+            try:
+                target.relative_to((root / "assets").resolve(strict=False))
+            except ValueError:
+                self._json({"error": "invalid static path"}, status=400)
+                return
+            if not target.exists() or not target.is_file():
+                self._json({"error": "static asset not found"}, status=404)
+                return
+            data = target.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", mimetypes.guess_type(str(target))[0] or "application/octet-stream")
+            self.send_header("Content-Length", str(len(data)))
+            self._cors_headers()
+            self.end_headers()
+            self.wfile.write(data)
+
         def _cors_headers(self) -> None:
             self.send_header("Access-Control-Allow-Origin", f"http://{host}:{port}")
             self.send_header("Vary", "Origin")
@@ -207,6 +230,23 @@ def _load_bench(path: Path | None) -> dict[str, Any]:
     if not path or not path.exists():
         return {"metrics": {}, "samples": []}
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _static_root() -> Path:
+    studio_root = Path(__file__).resolve().parents[3] / "web" / "studio"
+    dist = studio_root / "dist"
+    if (dist / "index.html").exists() or (dist / "react.html").exists():
+        return dist
+    return studio_root
+
+
+def _studio_html() -> str:
+    root = _static_root()
+    for name in ("index.html", "react.html"):
+        index = root / name
+        if index.exists():
+            return index.read_text(encoding="utf-8")
+    return _index_html()
 
 
 def _index_html() -> str:

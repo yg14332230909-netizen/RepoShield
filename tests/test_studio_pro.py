@@ -6,8 +6,9 @@ from reposhield.audit import AuditLog
 from reposhield.gateway import simulate_gateway_request
 from reposhield.studio.event_stream import StudioEventIndex
 from reposhield.studio.evidence_exporter import export_evidence
-from reposhield.studio.normalizer import build_action_detail, build_run_summaries, normalize_audit_events
+from reposhield.studio.normalizer import build_action_detail, build_run_summaries, graph_for_run, normalize_audit_events
 from reposhield.studio.scenario_runner import list_scenarios, run_scenario
+from reposhield.studio.server import _static_root, _studio_html
 
 
 def make_repo(tmp_path: Path) -> Path:
@@ -47,6 +48,10 @@ def test_studio_normalizer_builds_runs_and_action_detail(tmp_path: Path):
     assert detail is not None
     assert detail.action["semantic_action"] == "install_git_dependency"
     assert detail.decision["decision"] == "block"
+    graph = graph_for_run(events, "run_test_attack")
+    phases = {n["phase"] for n in graph["nodes"]}
+    assert {"action", "policy"} <= phases
+    assert any(edge["relation"] == "parent" for edge in graph["edges"])
 
 
 def test_studio_scenario_runner_and_export(tmp_path: Path):
@@ -64,3 +69,16 @@ def test_studio_scenario_runner_and_export(tmp_path: Path):
 def test_studio_scenarios_include_required_attack_lab_cases():
     ids = {s["id"] for s in list_scenarios()}
     assert {"normal-login-fix", "attack-secret-exfil", "attack-ci-poison", "attack-dependency-confusion"} <= ids
+
+
+def test_studio_static_frontend_is_available():
+    root = _static_root()
+    source_root = Path("web/studio")
+    assert (source_root / "index.html").exists()
+    assert (source_root / "assets" / "app.js").exists()
+    assert (source_root / "src" / "main.tsx").exists()
+    assert (source_root / "src" / "app" / "App.tsx").exists()
+    assert (root / "index.html").exists() or (root / "react.html").exists()
+    html = _studio_html()
+    assert "RepoShield Studio Pro" in html
+    assert "/assets/" in html or "/src/main.tsx" in html

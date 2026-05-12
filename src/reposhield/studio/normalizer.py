@@ -66,9 +66,7 @@ def normalize_audit_events(events: list[dict[str, Any]], *, agent_name: str = "l
         trace_id = str(payload.get("trace_id") or trace_by_session.get(str(event.get("session_id") or "")) or event.get("session_id") or "run_default")
         event_type = str(event.get("event_type") or "event")
         run_id = str(payload.get("run_id") or trace_id)
-        action_id = str(event.get("action_id") or payload.get("action_id") or "")
-        decision_id = str(event.get("decision_id") or payload.get("decision_id") or "")
-        span_id = action_id or decision_id or str(event.get("event_id") or f"event_{idx}")
+        span_id = _span_id(event_type, payload, event, idx)
         normalized.append(
             StudioEvent(
                 schema_version="studio.event.v1",
@@ -154,6 +152,22 @@ def graph_for_run(events: list[StudioEvent], run_id: str) -> dict[str, Any]:
         if e.parent_span_id:
             edges.append({"from": e.parent_span_id, "to": node_id, "relation": "parent"})
     return {"nodes": list(nodes.values()), "edges": edges}
+
+
+def _span_id(event_type: str, payload: dict[str, Any], event: dict[str, Any], index: int) -> str:
+    if event_type == "policy_decision":
+        return str(event.get("decision_id") or payload.get("decision_id") or event.get("event_id") or f"decision_{index}")
+    if event_type == "policy_runtime":
+        return str(event.get("decision_id") or payload.get("decision_id") or event.get("event_id") or f"runtime_{index}")
+    if event_type == "exec_trace":
+        return str(payload.get("exec_trace_id") or event.get("event_id") or f"exec_{index}")
+    if event_type == "package_event":
+        return str(payload.get("package_event_id") or event.get("event_id") or f"package_{index}")
+    if event_type == "secret_event":
+        return str(payload.get("secret_event_id") or event.get("event_id") or f"secret_{index}")
+    if event_type == "gateway_approval_request":
+        return str(payload.get("approval_request_id") or event.get("event_id") or f"approval_{index}")
+    return str(event.get("action_id") or payload.get("action_id") or event.get("decision_id") or payload.get("decision_id") or event.get("event_id") or f"event_{index}")
 
 
 def _payload_for_ui(event_type: str, payload: dict[str, Any], event: dict[str, Any]) -> dict[str, Any]:
