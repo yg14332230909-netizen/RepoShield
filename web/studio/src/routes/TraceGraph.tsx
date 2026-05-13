@@ -1,6 +1,7 @@
 import { Background, Controls, MiniMap, ReactFlow, type Edge, type Node } from "@xyflow/react";
 import type { GraphEdge, GraphNode } from "../types";
 import { DecisionBadge, displayLabel } from "../components/DecisionBadge";
+import { graphEdgeLabel, graphNodeDetail, graphNodeTitle } from "../components/displayText";
 
 const phaseOrder = ["context", "instruction", "action", "sandbox", "policy", "approval", "response", "evidence", "other"];
 
@@ -41,12 +42,13 @@ function toFlowNodes(nodes: GraphNode[], edges: GraphEdge[], activeActionId: str
     data: {
       label: (
         <button className={`flow-node ${node.severity} ${node.id === activeActionId ? "selected" : ""} ${activePath.has(node.id) ? "connected" : activeActionId ? "dimmed" : ""}`} onClick={() => node.phase === "action" && onInspectAction(node.id)}>
-          <span>{displayLabel(node.phase)} · {displayLabel(node.type)}</span>
-          <b>{node.label}</b>
+          <span>{displayLabel(node.phase)}</span>
+          <b>{graphNodeTitle(node)}</b>
+          <small>{graphNodeDetail(node)}</small>
         </button>
       )
     },
-    style: { width: 210, border: "0", padding: 0, background: "transparent" },
+    style: { width: 240, border: "0", padding: 0, background: "transparent" },
     draggable: true,
   }));
 }
@@ -57,7 +59,7 @@ function toFlowEdges(edges: GraphEdge[], activeActionId: string): Edge[] {
     id: `${edge.from}-${edge.to}-${edge.relation}-${index}`,
     source: edge.from,
     target: edge.to,
-    label: displayLabel(edge.relation),
+    label: graphEdgeLabel(edge.relation),
     animated: edge.relation === "influenced",
     style: {
       stroke: activePath.has(edge.from) && activePath.has(edge.to) ? "#b42318" : edge.relation === "evidence" ? "#175cd3" : "#98a2b3",
@@ -73,6 +75,10 @@ export function TraceGraph({ nodes, edges, activeActionId, onInspectAction }: { 
   const byPhase = phaseOrder.map((phase) => [phase, nodes.filter((node) => node.phase === phase).length] as const).filter(([, count]) => count);
   return (
     <>
+      <div className="graph-explainer">
+        <b>安全决策追踪图</b>
+        <span>从“信息来源”一路追到“工具动作”和“策略结论”，用来说明 RepoShield 为什么放行、沙箱、审批或阻断。</span>
+      </div>
       <div className="graph-toolbar">
         {byPhase.map(([phase, count]) => <DecisionBadge key={phase} label={`${phase}: ${count}`} severity={phase === "action" || phase === "policy" ? "warning" : "info"} />)}
       </div>
@@ -85,7 +91,10 @@ export function TraceGraph({ nodes, edges, activeActionId, onInspectAction }: { 
           </ReactFlow>
         ) : <div className="empty-state">暂无图谱节点。</div>}
       </div>
-      <pre className="json-block">{JSON.stringify(edges.slice(0, 80), null, 2)}</pre>
+      <details className="raw-graph">
+        <summary>查看原始审计关系</summary>
+        <pre className="json-block">{JSON.stringify(edges.slice(0, 80), null, 2)}</pre>
+      </details>
     </>
   );
 }

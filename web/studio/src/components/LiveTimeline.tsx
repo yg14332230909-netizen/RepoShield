@@ -1,5 +1,6 @@
 import type { StudioEvent } from "../types";
 import { DecisionBadge, displayLabel } from "./DecisionBadge";
+import { eventDetail, eventSummary } from "./displayText";
 
 function decisionOf(event: StudioEvent): string {
   return String(event.payload.decision || event.payload.effective_decision || event.payload.semantic_action || event.type);
@@ -18,8 +19,9 @@ export function LiveTimeline({ events, criticalOnly, activeActionId, onInspectAc
               <div className="muted">#{event.event_index}</div>
             </div>
             <div>
-              <b>{event.summary}</b>
-              <div className="muted">{displayLabel(event.type)} · {event.timestamp}</div>
+              <b>{eventSummary(event)}</b>
+              <div className="muted">{eventDetail(event)}</div>
+              <div className="tiny-meta">{displayLabel(event.type)} · {event.timestamp}</div>
             </div>
             <DecisionBadge label={decisionOf(event)} severity={event.severity} />
           </button>

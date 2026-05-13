@@ -209,13 +209,23 @@ h3 {
   border-bottom: 1px solid var(--line);
 }
 
+.side-note {
+  margin: 10px 12px 0;
+  padding: 10px 12px;
+  color: var(--muted);
+  background: #fbfcfe;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
 .run-list,
 .detail > div:last-child {
   overflow: auto;
 }
 
 .run-list {
-  height: calc(100% - 116px);
+  height: calc(100% - 178px);
   padding: 12px;
 }
 
@@ -247,6 +257,22 @@ h3 {
   display: block;
   font-size: 16px;
   overflow-wrap: anywhere;
+}
+
+.run-id,
+.tiny-meta {
+  display: block;
+  margin-top: 2px;
+  color: #98a2b3;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.run-purpose {
+  margin: 7px 0;
+  color: #475467;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .tabs {
@@ -403,6 +429,26 @@ h3 {
 .sandbox-card,
 .sample-row {
   padding: 12px;
+}
+
+.reason-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.reason-list span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #344054;
+  background: #f2f4f7;
+  border: 1px solid #eaecf0;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .rule-matrix {
@@ -590,6 +636,25 @@ h3 {
   font-weight: 800;
 }
 
+.graph-explainer {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.graph-explainer b {
+  font-size: 17px;
+}
+
+.graph-explainer span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .trace-graph {
   height: 560px;
   min-height: 420px;
@@ -607,8 +672,8 @@ h3 {
 }
 
 .flow-node {
-  width: 210px;
-  min-height: 74px;
+  width: 240px;
+  min-height: 112px;
   display: block;
   text-align: left;
   border: 1px solid var(--line);
@@ -624,14 +689,21 @@ h3 {
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
-  text-transform: uppercase;
 }
 
 .flow-node b {
   display: block;
   margin-top: 4px;
-  font-size: 14px;
+  font-size: 15px;
   overflow-wrap: anywhere;
+}
+
+.flow-node small {
+  display: block;
+  margin-top: 6px;
+  color: #475467;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .flow-node.critical {
@@ -672,8 +744,19 @@ h3 {
 }
 
 .react-flow__edge-text {
-  font-size: 11px;
-  fill: #475467;
+  font-size: 12px;
+  font-weight: 700;
+  fill: #344054;
+}
+
+.raw-graph {
+  margin-top: 12px;
+}
+
+.raw-graph summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 800;
 }
 
 .graph-node {

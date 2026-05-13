@@ -11,6 +11,7 @@ import { SandboxEvidence } from "../routes/SandboxEvidence";
 import { TraceGraph } from "../routes/TraceGraph";
 import { PolicyDebugger } from "../routes/PolicyDebugger";
 import { useRunStore } from "../state/useRunStore";
+import { runSubtitle, runTitle, shortId } from "../components/displayText";
 
 type Tab = "cockpit" | "attack" | "graph" | "policy" | "approvals" | "sandbox" | "bench";
 
@@ -33,7 +34,7 @@ export function App() {
   return (
     <>
       <header className="topbar">
-        <div><h1>RepoShield Studio Pro</h1><p>面向 coding agent 网关运行态、攻击链和策略决策的实时观测控制台。</p></div>
+        <div><h1>RepoShield Studio Pro</h1><p>看见 coding agent 为什么被放行、沙箱执行、要求审批或阻断。</p></div>
         <div className="topbar-actions">
           <span className="status-pill">{store.health?.version || "等待服务"} · {mode}</span>
           <TokenControl />
@@ -43,10 +44,13 @@ export function App() {
       <main className="shell">
         <aside className="sidebar">
           <div className="panel-head"><h2>运行记录</h2><span className="muted">{store.runs.length}</span></div>
+          <div className="side-note">每张卡片是一轮代理请求：正常任务会被沙箱约束，攻击载荷会被解释并阻断。</div>
           <div className="run-list">
             {store.runs.map((run) => (
               <button key={run.run_id} className={`run-card ${run.run_id === store.selectedRunId ? "active" : ""}`} onClick={() => store.selectRun(run.run_id)}>
-                <b>{run.demo_scenario_id || run.run_id}</b>
+                <b>{runTitle(run)}</b>
+                <span className="run-id">#{shortId(run.run_id)}</span>
+                <div className="run-purpose">{runSubtitle(run)}</div>
                 <div className="muted">{run.event_count} 个事件 · {run.action_count} 个动作</div>
                 <DecisionBadge label={run.latest_decision || "observing"} severity={run.blocked_count ? "critical" : "normal"} />
               </button>
@@ -68,8 +72,8 @@ export function App() {
           <div className="tab-page active">
             <div className="title-row">
               <div>
-                <h2>{store.selectedRun?.demo_scenario_id || store.selectedRunId || "未选择运行记录"}</h2>
-                <p className="muted">来源 {"->"} 指令 {"->"} 动作 {"->"} 决策 {"->"} 响应</p>
+                <h2>{store.selectedRun ? runTitle(store.selectedRun) : "未选择运行记录"}</h2>
+                <p className="muted">{store.selectedRun ? runSubtitle(store.selectedRun) : "选择左侧运行记录，查看 RepoShield 如何追踪来源、识别动作并做出安全决策。"}</p>
               </div>
               <button onClick={exportEvidence}>导出证据包</button>
             </div>
