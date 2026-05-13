@@ -1,0 +1,4 @@
+version: reposhield-policygraph-v0.4
+name: local_dev_strict
+extends: core_coding_agent
+rules: []

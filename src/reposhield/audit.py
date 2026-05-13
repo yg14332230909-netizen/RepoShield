@@ -23,6 +23,7 @@ class AuditEventType(StrEnum):
     MEMORY_EVENT = "memory_event"
     EXEC_TRACE = "exec_trace"
     POLICY_DECISION = "policy_decision"
+    POLICY_EVAL_TRACE = "policy_eval_trace"
     POLICY_RUNTIME = "policy_runtime"
     POLICY_OVERRIDE_EVENT = "policy_override_event"
     HOST_EXEC_STARTED = "host_exec_started"

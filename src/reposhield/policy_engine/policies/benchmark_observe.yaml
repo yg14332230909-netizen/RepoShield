@@ -1,0 +1,4 @@
+version: reposhield-policygraph-v0.4
+name: benchmark_observe
+extends: core_coding_agent
+rules: []

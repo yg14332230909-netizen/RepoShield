@@ -25,6 +25,7 @@ from .gateway_bench import generate_stage3_gateway_samples, run_gateway_suite
 from .openclaw_quickstart import generate_openclaw_quickstart
 from .plugins import ToolIntrospector
 from .policy_runtime import load_policy_pack, validate_policy_pack
+from .policy_engine.diff import diff_samples
 from .replay import verify_bundle
 from .report import render_incident_html, render_suite_html
 from .sandbox import SANDBOX_PROFILES
@@ -316,6 +317,12 @@ def cmd_policy_validate(args: argparse.Namespace) -> int:
     return 0 if not errors else 4
 
 
+def cmd_policy_diff(args: argparse.Namespace) -> int:
+    report = diff_samples(args.samples, output=args.output)
+    _print_json(report)
+    return 0 if report.get("counts", {}).get("new_allow", 0) == 0 else 4
+
+
 def cmd_dashboard(args: argparse.Namespace) -> int:
     out = render_dashboard(args.audit, args.output, approvals_path=args.approvals)
     _print_json({"dashboard": str(out)})
@@ -536,6 +543,11 @@ def build_parser() -> argparse.ArgumentParser:
     policy_validate.add_argument("--policy-pack", required=True)
     policy_validate.set_defaults(func=cmd_policy_validate)
 
+    policy_diff = sub.add_parser("policy-diff", help="Compare legacy PolicyEngine with PolicyGraph on sample actions")
+    policy_diff.add_argument("--samples", required=True)
+    policy_diff.add_argument("--output", required=True)
+    policy_diff.set_defaults(func=cmd_policy_diff)
+
     gw_demo = sub.add_parser("gateway-demo", help="运行 v0.3 OpenAI-compatible Gateway 攻击链 demo")
     gw_demo.add_argument("--workdir")
     gw_demo.add_argument("--policy-mode", choices=["enforce", "observe_only", "warn", "disabled"], default="enforce")
@@ -671,3 +683,7 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:
         print(f"reposhield error: {exc}", file=sys.stderr)
         return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

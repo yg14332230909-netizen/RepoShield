@@ -1,0 +1,4 @@
+version: reposhield-policygraph-v0.4
+name: release_guard
+extends: core_coding_agent
+rules: []

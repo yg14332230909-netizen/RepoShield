@@ -1,0 +1,12 @@
+version: reposhield-policygraph-v0.4
+name: core_coding_agent
+rules:
+  - rule_id: DSL-SANDBOX-UNKNOWN-001
+    name: unknown_side_effect_requires_preflight
+    category: parser
+    match:
+      action.semantic_action: unknown_side_effect
+    decision: sandbox_then_approval
+    risk_score: 82
+    reason_codes: [default_fail_closed]
+    required_controls: [sandbox_preflight, human_approval]

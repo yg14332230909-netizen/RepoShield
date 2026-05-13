@@ -134,10 +134,13 @@ class RepoShieldControlPlane:
             self.audit.append("exec_trace", asdict(trace), task_id=self.contract.task_id, actor="sandbox", action_id=action.action_id)
             decision = self.policy.decide(self.contract, action, self.asset_graph, self.provenance.graph, package_event=package_event, secret_event=secret_event, exec_trace=trace)
 
+        policy_eval_events = self.policy.consume_eval_events() if hasattr(self.policy, "consume_eval_events") else []
         decision = self.policy_overrides.apply(action, decision)
         for event in self.policy_overrides.consume_events():
             self.audit.append("policy_override_event", event, task_id=self.contract.task_id, actor="policy_config", action_id=action.action_id, decision_id=decision.decision_id)
 
+        for event in policy_eval_events:
+            self.audit.append("policy_eval_trace", event, task_id=self.contract.task_id, actor="policy_engine", source_ids=action.source_ids, action_id=action.action_id, decision_id=decision.decision_id)
         self.audit.append("policy_decision", asdict(decision), task_id=self.contract.task_id, actor="policy_engine", source_ids=action.source_ids, action_id=action.action_id, decision_id=decision.decision_id)
         return action, decision
 

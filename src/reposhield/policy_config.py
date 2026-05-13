@@ -9,7 +9,7 @@ from typing import Any
 from .models import ActionIR, Decision, PolicyDecision
 
 VALID_DECISIONS: set[str] = {"allow", "allow_in_sandbox", "sandbox_then_approval", "block", "quarantine"}
-DECISION_RANK = {"allow": 0, "allow_in_sandbox": 1, "sandbox_then_approval": 2, "block": 3, "quarantine": 4}
+DECISION_RANK = {"allow": 0, "allow_in_sandbox": 1, "sandbox_then_approval": 2, "quarantine": 3, "block": 4}
 
 
 class ConfigurablePolicyOverrides:
@@ -58,6 +58,13 @@ class ConfigurablePolicyOverrides:
                     decision,
                     reason_codes=list(dict.fromkeys([*decision.reason_codes, "invalid_policy_override_decision"])),
                 )
+            if self._is_invariant_protected(decision) and self._is_unsafe_downgrade(decision.decision, new_decision):
+                self._events.append({"event": "unsafe_policy_downgrade_rejected", "rule": rule.get("name"), "from": decision.decision, "to": new_decision})
+                self._events.append({"event": "invariant_policy_downgrade_rejected", "rule": rule.get("name"), "from": decision.decision, "to": new_decision})
+                return replace(
+                    decision,
+                    reason_codes=list(dict.fromkeys([*decision.reason_codes, "unsafe_policy_downgrade_rejected", "invariant_policy_downgrade_rejected", reason])),
+                )
             if self._is_unsafe_downgrade(decision.decision, new_decision) and not self._has_trusted_unsafe_override(rule):
                 self._events.append({"event": "unsafe_policy_downgrade_rejected", "rule": rule.get("name"), "from": decision.decision, "to": new_decision})
                 return replace(
@@ -92,6 +99,16 @@ class ConfigurablePolicyOverrides:
     @staticmethod
     def _has_trusted_unsafe_override(rule: dict[str, Any]) -> bool:
         return bool(rule.get("unsafe_override") and (rule.get("trusted_admin_policy") or rule.get("admin_signed")))
+
+    @staticmethod
+    def _is_invariant_protected(decision: PolicyDecision) -> bool:
+        if any(bool(rule.get("invariant")) for rule in decision.matched_rules):
+            return True
+        for trace in decision.rule_trace:
+            hits = trace.get("invariant_hits") if isinstance(trace, dict) else None
+            if hits:
+                return True
+        return False
 
     @staticmethod
     def _matches(match: dict[str, Any], action: ActionIR, decision: PolicyDecision) -> bool:
