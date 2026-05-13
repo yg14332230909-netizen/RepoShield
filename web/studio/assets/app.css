@@ -478,11 +478,299 @@ h3 {
   background: #f8fafc;
 }
 
+.policy-debugger {
+  display: grid;
+  gap: 14px;
+}
+
+.policy-explainer {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.policy-explainer b {
+  font-size: 17px;
+}
+
+.policy-explainer span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.policy-card {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.policy-card.critical {
+  background: linear-gradient(0deg, #fff, #fff), var(--red-bg);
+  border-color: #fecdca;
+}
+
+.policy-card.warning {
+  border-color: #fedf89;
+}
+
+.policy-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.policy-card-head h3 {
+  margin: 2px 0 6px;
+}
+
+.policy-card-head p {
+  margin: 0;
+  color: #475467;
+}
+
+.policy-eyebrow {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.policy-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.policy-summary-grid section {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-height: 118px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.policy-summary-grid b,
+.matched-rule-list > b {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.policy-summary-grid span {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.policy-summary-grid small {
+  color: #667085;
+  font-size: 13px;
+}
+
+.matched-rule-list {
+  display: grid;
+  gap: 8px;
+}
+
+.matched-rule {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.approval-center {
+  display: grid;
+  gap: 14px;
+}
+
+.approval-explainer {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.approval-explainer b {
+  font-size: 17px;
+}
+
+.approval-explainer span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.approval-card {
+  display: grid;
+  gap: 14px;
+}
+
+.approval-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.approval-card-head h3 {
+  margin: 2px 0 6px;
+}
+
+.approval-card-head p {
+  margin: 0;
+  color: #475467;
+}
+
+.approval-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.approval-summary-grid section {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 12px;
+  min-height: 108px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.approval-summary-grid b,
+.approval-binding > b {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.approval-summary-grid span {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.approval-summary-grid code,
+.binding-grid code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #344054;
+  font: 13px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.approval-binding {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.approval-binding > span {
+  color: #475467;
+  font-size: 14px;
+}
+
+.binding-grid {
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  gap: 6px 10px;
+}
+
+.binding-grid span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .sandbox-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px;
   margin: 10px 0;
+}
+
+.sandbox-evidence-view {
+  display: grid;
+  gap: 14px;
+}
+
+.sandbox-explainer {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.sandbox-explainer b {
+  font-size: 17px;
+}
+
+.sandbox-explainer span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.sandbox-card {
+  display: grid;
+  gap: 14px;
+}
+
+.sandbox-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.sandbox-card-head h3 {
+  margin: 2px 0 6px;
+}
+
+.sandbox-card-head p {
+  margin: 0;
+  color: #475467;
+}
+
+.sandbox-command {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.sandbox-command b {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.sandbox-command code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #344054;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
 .sandbox-grid > div,
@@ -499,6 +787,37 @@ h3 {
 .hash-summary b {
   color: var(--muted);
   font-size: 14px;
+}
+
+.sandbox-grid span {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.sandbox-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.sandbox-evidence-grid section {
+  min-height: 96px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.sandbox-evidence-grid h4 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.sandbox-evidence-grid p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 800;
 }
 
 .sandbox-columns {
@@ -655,6 +974,37 @@ h3 {
   font-size: 14px;
 }
 
+.graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  margin: -2px 0 12px;
+  color: #475467;
+  font-size: 13px;
+}
+
+.graph-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-line {
+  width: 30px;
+  height: 0;
+  border-top: 3px solid #98a2b3;
+}
+
+.legend-line.evidence {
+  border-color: var(--blue);
+}
+
+.legend-line.influence {
+  border-color: var(--red);
+  border-top-style: dashed;
+}
+
 .trace-graph {
   height: 560px;
   min-height: 420px;
@@ -747,6 +1097,10 @@ h3 {
   font-size: 12px;
   font-weight: 700;
   fill: #344054;
+}
+
+.react-flow__edge-path {
+  marker-end: inherit;
 }
 
 .raw-graph {

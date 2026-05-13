@@ -149,11 +149,24 @@ export function graphNodeDetail(node: { type: string; phase: string; label: stri
   return displayLabel(node.phase);
 }
 
-export function graphEdgeLabel(relation: string): string {
+export function graphEdgeLabel(relation: string, source?: { type: string; phase: string }, target?: { type: string; phase: string }): string {
+  if (relation === "influenced") return "这段来源影响了后续判断";
+  if (relation === "evidence") return "这条记录作为决策证据";
+  if (relation === "parent") {
+    if (target?.type === "source_ingested") return "接入上下文";
+    if (target?.type === "task_contract") return "固定用户授权范围";
+    if (target?.type === "instruction_ir") return "解析代理意图";
+    if (target?.type === "action_parsed") return "识别成工具动作";
+    if (target?.type === "exec_trace") return "先送入沙箱预检";
+    if (target?.type === "secret_event") return "触发敏感资产检查";
+    if (target?.type === "policy_decision") return "交给策略规则判定";
+    if (target?.type === "gateway_approval_request") return "转为人工审批";
+    if (target?.type === "policy_runtime") return "执行策略结论";
+    if (target?.type === "gateway_response") return "形成安全响应";
+    if (source?.phase && target?.phase) return `${displayLabel(source.phase)}到${displayLabel(target.phase)}`;
+  }
   const map: Record<string, string> = {
-    next: "下一步",
-    influenced: "影响了",
-    evidence: "作为证据",
+    next: "进入下一步",
     contains: "包含",
     derived_from: "派生出",
     related_to: "关联到"
