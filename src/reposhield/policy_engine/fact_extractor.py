@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Any
 
 from ..contract import IntentMatcher
 from .context import PolicyEvalContext

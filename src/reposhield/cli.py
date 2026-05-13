@@ -24,8 +24,8 @@ from .gateway import RepoShieldGateway, make_upstream, serve_gateway, simulate_g
 from .gateway_bench import generate_stage3_gateway_samples, run_gateway_suite
 from .openclaw_quickstart import generate_openclaw_quickstart
 from .plugins import ToolIntrospector
-from .policy_runtime import load_policy_pack, validate_policy_pack
 from .policy_engine.diff import diff_samples
+from .policy_runtime import load_policy_pack, validate_policy_pack
 from .replay import verify_bundle
 from .report import render_incident_html, render_suite_html
 from .sandbox import SANDBOX_PROFILES
