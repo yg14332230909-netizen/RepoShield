@@ -1,5 +1,6 @@
 import type { RunSummary, StudioEvent } from "../types";
 import { LiveTimeline } from "../components/LiveTimeline";
+import { displayLabel } from "../components/DecisionBadge";
 
 export function RunCockpit({ run, events, criticalOnly, activeActionId, setCriticalOnly, onInspectAction }: { run: RunSummary | null; events: StudioEvent[]; criticalOnly: boolean; activeActionId: string; setCriticalOnly: (value: boolean) => void; onInspectAction: (actionId: string) => void }) {
   const metrics = [
@@ -8,7 +9,7 @@ export function RunCockpit({ run, events, criticalOnly, activeActionId, setCriti
     ["阻断", run?.blocked_count || 0],
     ["审批", run?.approval_count || 0],
     ["高危", run?.critical_count || 0],
-    ["最新", run?.latest_decision || "observing"]
+    ["最新", displayLabel(run?.latest_decision || "observing")]
   ];
   return (
     <>

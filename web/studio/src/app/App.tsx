@@ -18,6 +18,7 @@ export function App() {
   const store = useRunStore();
   const [criticalOnly, setCriticalOnly] = useState(false);
   const [tab, setTab] = useState<Tab>("cockpit");
+  const mode = store.health ? (store.health.demo_mode ? "演示模式" : "实时模式") : "连接中";
 
   async function refreshAll() {
     await store.refreshRuns();
@@ -34,7 +35,7 @@ export function App() {
       <header className="topbar">
         <div><h1>RepoShield Studio Pro</h1><p>面向 coding agent 网关运行态、攻击链和策略决策的实时观测控制台。</p></div>
         <div className="topbar-actions">
-          <span className="status-pill">{store.health?.version || "connecting"} {store.health?.demo_mode ? "demo" : "live"}</span>
+          <span className="status-pill">{store.health?.version || "等待服务"} · {mode}</span>
           <TokenControl />
           <button onClick={refreshAll}>刷新</button>
         </div>
@@ -46,14 +47,14 @@ export function App() {
             {store.runs.map((run) => (
               <button key={run.run_id} className={`run-card ${run.run_id === store.selectedRunId ? "active" : ""}`} onClick={() => store.selectRun(run.run_id)}>
                 <b>{run.demo_scenario_id || run.run_id}</b>
-                <div className="muted">{run.event_count} events · {run.action_count} actions</div>
+                <div className="muted">{run.event_count} 个事件 · {run.action_count} 个动作</div>
                 <DecisionBadge label={run.latest_decision || "observing"} severity={run.blocked_count ? "critical" : "normal"} />
               </button>
             ))}
           </div>
         </aside>
         <section className="workspace">
-          <nav className="tabs" aria-label="Studio sections">
+          <nav className="tabs" aria-label="Studio 分区">
             {[
               ["cockpit", "运行驾驶舱"],
               ["attack", "攻击演示"],
@@ -68,7 +69,7 @@ export function App() {
             <div className="title-row">
               <div>
                 <h2>{store.selectedRun?.demo_scenario_id || store.selectedRunId || "未选择运行记录"}</h2>
-                <p className="muted">source {"->"} instruction {"->"} action {"->"} decision {"->"} response</p>
+                <p className="muted">来源 {"->"} 指令 {"->"} 动作 {"->"} 决策 {"->"} 响应</p>
               </div>
               <button onClick={exportEvidence}>导出证据包</button>
             </div>

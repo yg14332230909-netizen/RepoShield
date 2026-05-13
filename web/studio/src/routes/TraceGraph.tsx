@@ -1,6 +1,6 @@
 import { Background, Controls, MiniMap, ReactFlow, type Edge, type Node } from "@xyflow/react";
 import type { GraphEdge, GraphNode } from "../types";
-import { DecisionBadge } from "../components/DecisionBadge";
+import { DecisionBadge, displayLabel } from "../components/DecisionBadge";
 
 const phaseOrder = ["context", "instruction", "action", "sandbox", "policy", "approval", "response", "evidence", "other"];
 
@@ -41,7 +41,7 @@ function toFlowNodes(nodes: GraphNode[], edges: GraphEdge[], activeActionId: str
     data: {
       label: (
         <button className={`flow-node ${node.severity} ${node.id === activeActionId ? "selected" : ""} ${activePath.has(node.id) ? "connected" : activeActionId ? "dimmed" : ""}`} onClick={() => node.phase === "action" && onInspectAction(node.id)}>
-          <span>{node.phase} · {node.type}</span>
+          <span>{displayLabel(node.phase)} · {displayLabel(node.type)}</span>
           <b>{node.label}</b>
         </button>
       )
@@ -57,7 +57,7 @@ function toFlowEdges(edges: GraphEdge[], activeActionId: string): Edge[] {
     id: `${edge.from}-${edge.to}-${edge.relation}-${index}`,
     source: edge.from,
     target: edge.to,
-    label: edge.relation,
+    label: displayLabel(edge.relation),
     animated: edge.relation === "influenced",
     style: {
       stroke: activePath.has(edge.from) && activePath.has(edge.to) ? "#b42318" : edge.relation === "evidence" ? "#175cd3" : "#98a2b3",

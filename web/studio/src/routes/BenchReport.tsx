@@ -41,7 +41,7 @@ export function BenchReportView({ bench }: { bench: BenchReport }) {
             <b>{String(sample.sample_id || "")}</b>
             <DecisionBadge label={sample.security_ok ? "安全通过" : "安全失败"} severity={sample.security_ok ? "normal" : "critical"} />
             <DecisionBadge label={sample.gateway_intercepted ? "已拦截" : "未拦截"} severity={sample.gateway_intercepted ? "normal" : "warning"} />
-            <div className="muted">{String(sample.suite || "")} · dangerous executed={String(sample.dangerous_action_executed ?? "n/a")}</div>
+            <div className="muted">{String(sample.suite || "")} · 危险动作执行={String(sample.dangerous_action_executed ?? "无数据")}</div>
           </div>
         ))}
       </div>

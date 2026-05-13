@@ -1,5 +1,5 @@
 import type { RunSummary, ScenarioSpec } from "../types";
-import { DecisionBadge } from "../components/DecisionBadge";
+import { DecisionBadge, displayLabel } from "../components/DecisionBadge";
 
 function latestRunFor(scenarioId: string, runs: RunSummary[]): RunSummary | undefined {
   return runs.find((run) => run.demo_scenario_id === scenarioId);
@@ -10,7 +10,7 @@ function runCard(run?: RunSummary, onOpenRun?: (runId: string) => void) {
   return (
     <button className="compare-column" onClick={() => onOpenRun?.(run.run_id)}>
       <b>{run.demo_scenario_id || run.run_id}</b>
-      <div className="muted">{run.event_count} events · {run.action_count} actions · {run.agent_name}</div>
+      <div className="muted">{run.event_count} 个事件 · {run.action_count} 个动作 · {run.agent_name}</div>
       <DecisionBadge label={run.latest_decision || "observing"} severity={run.blocked_count ? "critical" : "normal"} />
     </button>
   );
@@ -20,8 +20,8 @@ function diffRow(label: string, normal?: RunSummary, attack?: RunSummary, pick: 
   return (
     <div className="diff-row">
       <span>{label}</span>
-      <b>{normal ? pick(normal) : "n/a"}</b>
-      <b>{attack ? pick(attack) : "n/a"}</b>
+        <b>{normal ? displayLabel(pick(normal)) : "无数据"}</b>
+        <b>{attack ? displayLabel(pick(attack)) : "无数据"}</b>
     </div>
   );
 }

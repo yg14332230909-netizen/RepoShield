@@ -1,5 +1,5 @@
 import type { ApprovalEvent } from "../types";
-import { DecisionBadge } from "../components/DecisionBadge";
+import { DecisionBadge, displayLabel } from "../components/DecisionBadge";
 
 function statusFor(request: ApprovalEvent, events: ApprovalEvent[]): "pending" | "granted" | "denied" {
   const payload = request.payload;
@@ -30,9 +30,9 @@ export function ApprovalCenter({ events, onGrant, onDeny }: { events: ApprovalEv
             </div>
             <div className="hash-summary">
               <b>哈希绑定摘要</b>
-              <span>task_id={String(payload.task_id || "n/a")}</span>
-              <span>action_id={String(payload.action_id || "n/a")}</span>
-              <span>plan_hash={String(payload.plan_hash || "n/a")}</span>
+              <span>task_id={String(payload.task_id || "无")}</span>
+              <span>action_id={String(payload.action_id || "无")}</span>
+              <span>plan_hash={String(payload.plan_hash || "无")}</span>
               <span>affected_assets={JSON.stringify(payload.affected_assets || [])}</span>
             </div>
             {status === "pending" ? (
@@ -46,7 +46,7 @@ export function ApprovalCenter({ events, onGrant, onDeny }: { events: ApprovalEv
                   if (ok) onDeny(approvalId);
                 }}>拒绝</button>
               </>
-            ) : <div className="muted">该请求已在 ApprovalStore 中结束，状态为 {status}。</div>}
+            ) : <div className="muted">该请求已在 ApprovalStore 中结束，状态为 {displayLabel(status)}。</div>}
           </div>
         );
       })}

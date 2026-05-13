@@ -18,10 +18,10 @@ export function SandboxEvidence({ events }: { events: StudioEvent[] }) {
             <DecisionBadge label={String(payload.recommended_decision || "sandbox")} severity={event.severity} />
             <h3>{String(payload.command || event.summary)}</h3>
             <div className="sandbox-grid">
-              <div><b>沙箱配置</b><span>{String(payload.sandbox_profile || "n/a")}</span></div>
+              <div><b>沙箱配置</b><span>{String(payload.sandbox_profile || "无")}</span></div>
               <div><b>网络意图</b><span>{networkAttempts.length} 次尝试</span></div>
               <div><b>文件访问</b><span>{filesRead.length} 读 / {filesWritten.length} 写</span></div>
-              <div><b>观测风险</b><span>{Array.isArray(payload.risk_observed) ? payload.risk_observed.join(", ") : "none"}</span></div>
+              <div><b>观测风险</b><span>{Array.isArray(payload.risk_observed) && payload.risk_observed.length ? payload.risk_observed.join(", ") : "无"}</span></div>
             </div>
             <div className="sandbox-columns">
               <section><h4>进程树</h4><pre>{JSON.stringify(processTree, null, 2)}</pre></section>
