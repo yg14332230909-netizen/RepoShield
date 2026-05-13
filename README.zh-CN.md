@@ -26,9 +26,10 @@ RepoShield = coding agent 的 pre-execution safety gate
 最近验证状态：
 
 ```text
-python -m pytest --basetemp=.pytest_tmp -q   -> 77 passed
+pytest -q --basetemp=.pytest_tmp_run         -> 97 passed
 python -m compileall -q src tests            -> passed
 ruff check src tests                         -> passed
+cd web/studio && npm run build               -> passed
 ```
 
 ## 已完成的核心能力
@@ -56,7 +57,7 @@ ruff check src tests                         -> passed
 - GuardedExecAdapter：host execution started/completed audit，stdout/stderr 脱敏截断和 hash
 - AuditLog：线程安全 hash-chain、schema version、基础 event validation
 - Replay：hash-chain 与 policy evidence 引用校验
-- Dashboard：blocked actions、approval events、evidence chains
+- Studio Pro：全局 SSE 自动观测、运行时间线、证据图谱、审批、沙箱预检、清空记录可选备份
 - Bench：stage2/stage3 sample suite、gateway bench、baseline/ablation 报告框架
 
 ## 主要架构
@@ -108,6 +109,18 @@ api_key  = reposhield-local
 model    = gpt-4.1
 ```
 
+如果使用 LongCat 这类 OpenAI-compatible 上游，把 Gateway 的 upstream 地址换成对应平台地址，例如：
+
+```bash
+export OPENAI_API_KEY=ak-your-longcat-key
+
+PYTHONPATH=src python -m reposhield gateway-start \
+  --repo ./your-repo \
+  --host 127.0.0.1 \
+  --port 8765 \
+  --upstream-base-url https://api.longcat.chat/openai
+```
+
 包装真实 shell 工具：
 
 ```bash
@@ -125,6 +138,19 @@ PYTHONPATH=src python -m reposhield init-agent \
   --agent cline \
   --task "fix login and run tests"
 ```
+
+启动实时 Studio Pro：
+
+```bash
+PYTHONPATH=src python -m reposhield studio-server \
+  --audit .reposhield/gateway_audit.jsonl \
+  --approvals .reposhield/gateway_approvals.jsonl \
+  --host 127.0.0.1 \
+  --port 8780 \
+  --demo-mode
+```
+
+打开 `http://127.0.0.1:8780` 后，页面会通过 `/api/events/stream` 自动接收真实 Gateway 事件；新的 OpenClaw / agent 请求会自动出现在左侧运行记录和中间时间线。
 
 ## 决策语义
 
@@ -154,7 +180,7 @@ RepoShield 现在适合论文、演示、内部实验和小范围本地试用。
    需要稳定策略语言、策略签名、租户级策略、审批 API/UI、权限模型、API key rotation。
 
 5. **Studio / Dashboard 产品化**  
-   当前是本地 HTML evidence view。商用需要过滤、搜索、diff 展示、trace graph、approval 操作、policy debug。
+   当前已有本地交互式 Studio Pro、全局事件自动观测、trace graph、approval 操作和 policy debug。商用仍需要团队权限、搜索过滤、长期存储、差异对比和多项目视图。
 
 6. **实验体系增强**  
    baseline/ablation 框架已有，仍需要更多真实 agent traces、攻击样本多样化、误报/漏报统计。

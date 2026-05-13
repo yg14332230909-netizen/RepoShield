@@ -157,6 +157,11 @@ REPOSHIELD_HOST={host}
 REPOSHIELD_PORT={port}
 REPOSHIELD_MODEL={model}
 REPOSHIELD_UPSTREAM_BASE_URL={upstream_base_url}
+
+# LongCat example:
+# OPENAI_API_KEY=ak-your-longcat-key
+# REPOSHIELD_MODEL=LongCat-Flash-Chat
+# REPOSHIELD_UPSTREAM_BASE_URL=https://api.longcat.chat/openai
 """
 
 
@@ -207,10 +212,18 @@ API Key:  reposhield-local
 Model:    {model}
 ```
 
-The real upstream is:
+The local OpenClaw provider should always point to RepoShield. The real upstream
+is configured on the RepoShield Gateway side:
 
 ```text
-{upstream_base_url}
+REPOSHIELD_UPSTREAM_BASE_URL={upstream_base_url}
+```
+
+For LongCat keys such as `ak_...`, use:
+
+```text
+REPOSHIELD_UPSTREAM_BASE_URL=https://api.longcat.chat/openai
+REPOSHIELD_MODEL=LongCat-Flash-Chat
 ```
 
 OpenClaw should only see the local RepoShield key. Keep the terminal running

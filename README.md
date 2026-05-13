@@ -26,7 +26,7 @@ Approximate maturity:
 Latest local verification:
 
 ```text
-pytest -q --basetemp=.pytest_tmp_run         -> 94 passed
+pytest -q --basetemp=.pytest_tmp_run         -> 97 passed
 python -m compileall -q src tests            -> passed
 ruff check src tests                         -> passed
 cd web/studio && npm run build               -> passed
@@ -81,7 +81,7 @@ and attack scenarios in real time.
 
 Studio Pro includes:
 
-- Run Cockpit with live timeline and decision stream
+- Run Cockpit with live timeline, decision stream, and automatic global event observation
 - Attack Lab with normal/attack storyboards and comparator metrics
 - React Flow trace graph for source -> action -> decision -> evidence paths
 - Action detail drawer with ActionIR, source trust, matched rules, rule trace, and evidence refs
@@ -90,6 +90,11 @@ Studio Pro includes:
 - Sandbox Evidence panels for process tree, network intent, file diff, and redacted trace
 - Bench & Report filters for suite and security result
 - Redacted evidence bundle export
+- Demo-record cleanup with user-selectable backup before clearing local audit/approval logs
+
+The live dashboard subscribes to `/api/events/stream`, so new Gateway events from
+real agents appear without pressing refresh. It also keeps a short polling
+fallback for run summaries and approval/benchmark side panels.
 
 Start the local dashboard:
 
@@ -123,9 +128,11 @@ reposhield studio-server \
   --demo-mode
 
 # 2. Open http://127.0.0.1:8780
-# 3. In Attack Lab, run normal-login-fix and attack-dependency-confusion
-# 4. Open Trace Graph and click the action node
-# 5. Inspect Action Detail, Policy Debugger, Sandbox Evidence, and Approval Center
+# 3. In Attack Lab, run normal-login-fix and attack-dependency-confusion,
+#    or point a real OpenClaw/OpenAI-compatible agent at RepoShield Gateway.
+# 4. Watch the run list and timeline update automatically.
+# 5. Open Trace Graph and click the action node.
+# 6. Inspect Action Detail, Policy Debugger, Sandbox Evidence, and Approval Center.
 ```
 
 Export a redacted evidence bundle:
@@ -221,6 +228,26 @@ PYTHONPATH=src python -m reposhield init-agent \
   --repo ./your-repo \
   --agent openclaw \
   --task "fix login button and run tests"
+```
+
+For OpenClaw, you can also generate a dedicated provider bundle:
+
+```bash
+PYTHONPATH=src python -m reposhield openclaw-quickstart \
+  --repo ./your-repo \
+  --reposhield-home . \
+  --model gpt-4.1
+```
+
+If your upstream key belongs to a non-OpenAI compatible provider, set the
+matching upstream base URL when starting RepoShield. For example, LongCat uses:
+
+```bash
+PYTHONPATH=src python -m reposhield gateway-start \
+  --repo ./your-repo \
+  --host 127.0.0.1 \
+  --port 8765 \
+  --upstream-base-url https://api.longcat.chat/openai
 ```
 
 When an agent exposes tool definitions, RepoShield can infer mappings instead

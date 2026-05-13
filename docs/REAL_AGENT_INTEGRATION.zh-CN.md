@@ -42,6 +42,36 @@ model    = gpt-4.1
 
 `api_key` 在本地 Gateway 侧只用于兼容 agent；真实上游密钥来自 `OPENAI_API_KEY` 或 `--upstream-api-key`。
 
+如果上游不是 OpenAI，而是其他 OpenAI-compatible 服务，需要把 `--upstream-base-url` 改成对应平台的地址。例如 LongCat：
+
+```bash
+export OPENAI_API_KEY=ak-your-longcat-key
+
+PYTHONPATH=src python -m reposhield gateway-start \
+  --repo ./your-repo \
+  --host 127.0.0.1 \
+  --port 8765 \
+  --upstream-base-url https://api.longcat.chat/openai
+```
+
+OpenClaw 侧仍然只配置 RepoShield 本地地址：
+
+```text
+base_url = http://127.0.0.1:8765/v1
+api_key  = reposhield-local
+model    = LongCat-Flash-Chat
+```
+
+可以用一条命令生成 OpenClaw provider 和启动脚本：
+
+```bash
+PYTHONPATH=src python -m reposhield openclaw-quickstart \
+  --repo ./your-repo \
+  --reposhield-home . \
+  --model LongCat-Flash-Chat \
+  --upstream-base-url https://api.longcat.chat/openai
+```
+
 ## 方式二：exec-guard 接入 shell
 
 如果 agent 会直接运行 shell 命令，把命令包进：
@@ -151,12 +181,12 @@ Gateway 已支持 agent 侧 `stream=true`，并返回 OpenAI-compatible `text/ev
 - file-guard 包文件动作
 - init-agent 生成 shims
 - approvals CLI 闭环
-- dashboard 查看 audit / approvals
+- Studio Pro 实时查看 audit / approvals、证据图谱、策略调试、沙箱证据和人工审批
 
 仍需继续做：
 
 - 更完整的 Cline / Codex / OpenHands / Claude Code / Aider adapter
 - 更强 shell parser 和脚本间接执行识别
 - 真正隔离的 sandbox
-- Web 审批 UI、团队策略和持久权限记忆
+- 团队策略、权限模型、持久权限记忆和生产级审计存储
 - token-by-token streaming governance
