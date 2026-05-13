@@ -44,7 +44,7 @@ export function PolicyDebugger({ events }: { events: StudioEvent[] }) {
   return (
     <div className="policy-debugger">
       <div className="policy-explainer">
-        <b>策略调试看什么？</b>
+        <b>拦截原因看什么？</b>
         <span>这里把“动作是什么、为什么危险、命中了哪条规则、证据来自哪里”拆开说明，帮助判断这是合理拦截还是误报。</span>
       </div>
       {decisions.map((event) => {

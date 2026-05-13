@@ -4,7 +4,9 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import shutil
 from dataclasses import asdict
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -112,6 +114,15 @@ def serve_studio_pro(
                 )
                 index.refresh()
                 self._json(redact_value(result))
+                return
+            if path == "/api/admin/clear-records":
+                if not demo_mode:
+                    self._json({"error": "clear_records_only_available_in_demo_mode"}, status=403)
+                    return
+                body = self._read_json()
+                result = _clear_records(audit, Path(approvals_path), repo, backup=bool(body.get("backup", True)))
+                index.refresh()
+                self._json(result)
                 return
             if path.startswith("/api/approvals/") and path.endswith("/grant"):
                 approval_id = unquote(path.split("/")[3])
@@ -224,6 +235,20 @@ def _find_request(store: ApprovalStore, approval_request_id: str) -> ApprovalReq
         if event.get("event_type") == "request" and event.get("payload", {}).get("approval_request_id") == approval_request_id:
             return ApprovalRequest(**event["payload"])
     return None
+
+
+def _clear_records(audit_path: Path, approvals_path: Path, repo: Path, backup: bool = True) -> dict[str, Any]:
+    backup_dir = repo / ".reposhield" / "studio_backups" / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backups: list[str] = []
+    for path in (audit_path, approvals_path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if backup and path.exists() and path.stat().st_size:
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            target = backup_dir / path.name
+            shutil.copy2(path, target)
+            backups.append(str(target))
+        path.write_text("", encoding="utf-8")
+    return {"ok": True, "cleared": [str(audit_path), str(approvals_path)], "backups": backups, "backup_enabled": backup}
 
 
 def _load_bench(path: Path | None) -> dict[str, Any]:

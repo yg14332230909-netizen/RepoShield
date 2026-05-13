@@ -49,7 +49,12 @@ def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
         for line in f:
             line = line.strip()
             if line:
-                events.append(json.loads(line))
+                try:
+                    events.append(json.loads(line))
+                except json.JSONDecodeError:
+                    # JSONL audit files can be tailed while another process is writing.
+                    # Skip incomplete/corrupt lines so Studio stays usable.
+                    continue
     return events
 
 

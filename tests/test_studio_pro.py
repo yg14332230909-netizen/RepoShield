@@ -6,9 +6,9 @@ from reposhield.audit import AuditLog
 from reposhield.gateway import simulate_gateway_request
 from reposhield.studio.event_stream import StudioEventIndex
 from reposhield.studio.evidence_exporter import export_evidence
-from reposhield.studio.normalizer import build_action_detail, build_run_summaries, graph_for_run, normalize_audit_events
+from reposhield.studio.normalizer import build_action_detail, build_run_summaries, graph_for_run, normalize_audit_events, read_jsonl
 from reposhield.studio.scenario_runner import list_scenarios, run_scenario
-from reposhield.studio.server import _static_root, _studio_html
+from reposhield.studio.server import _clear_records, _static_root, _studio_html
 
 
 def make_repo(tmp_path: Path) -> Path:
@@ -91,3 +91,44 @@ def test_studio_frontend_bundle_does_not_embed_canary_secret():
     combined = "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in (root / "assets").glob("*.js"))
     assert "npm_REPOSHIELD_STAGE3_CANARY" not in combined
     assert "RS_CANARY_NPM_TOKEN" not in combined
+
+
+def test_studio_clear_records_backs_up_and_empties_logs(tmp_path: Path):
+    audit = tmp_path / ".reposhield" / "audit.jsonl"
+    approvals = tmp_path / ".reposhield" / "approvals.jsonl"
+    audit.parent.mkdir()
+    audit.write_text('{"event_type":"gateway_pre_call"}\n', encoding="utf-8")
+    approvals.write_text('{"event_type":"request"}\n', encoding="utf-8")
+
+    result = _clear_records(audit, approvals, tmp_path, backup=True)
+
+    assert result["ok"] is True
+    assert result["backup_enabled"] is True
+    assert audit.read_text(encoding="utf-8") == ""
+    assert approvals.read_text(encoding="utf-8") == ""
+    assert len(result["backups"]) == 2
+    assert all(Path(path).exists() for path in result["backups"])
+
+
+def test_studio_clear_records_can_skip_backup(tmp_path: Path):
+    audit = tmp_path / ".reposhield" / "audit.jsonl"
+    approvals = tmp_path / ".reposhield" / "approvals.jsonl"
+    audit.parent.mkdir()
+    audit.write_text('{"event_type":"gateway_pre_call"}\n', encoding="utf-8")
+    approvals.write_text('{"event_type":"request"}\n', encoding="utf-8")
+
+    result = _clear_records(audit, approvals, tmp_path, backup=False)
+
+    assert result["ok"] is True
+    assert result["backup_enabled"] is False
+    assert result["backups"] == []
+    assert audit.read_text(encoding="utf-8") == ""
+    assert approvals.read_text(encoding="utf-8") == ""
+    assert not (tmp_path / ".reposhield" / "studio_backups").exists()
+
+
+def test_studio_read_jsonl_skips_incomplete_lines(tmp_path: Path):
+    audit = tmp_path / "audit.jsonl"
+    audit.write_text('{"event_type":"ok"}\n{"event_type": "broken"\n{"event_type":"ok2"}\n', encoding="utf-8")
+    events = read_jsonl(audit)
+    assert [event["event_type"] for event in events] == ["ok", "ok2"]

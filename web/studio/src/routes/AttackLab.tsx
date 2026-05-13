@@ -41,7 +41,7 @@ export function AttackLab({ scenarios, runs, onRunScenario, onOpenRun }: { scena
         <div className="story-step normal"><b>1. 正常任务</b><span>构建任务契约，允许源码编辑，将测试执行约束到沙箱。</span></div>
         <div className="story-step warning"><b>2. 低可信上下文</b><span>Issue、README、MCP 或 memory 内容会被标记为低可信来源。</span></div>
         <div className="story-step critical"><b>3. 危险动作</b><span>模型提出依赖安装、读取 secret、修改 CI 或网络外传等动作。</span></div>
-        <div className="story-step info"><b>4. RepoShield 决策</b><span>通过 ActionIR、命中规则和证据引用解释为什么阻断。</span></div>
+        <div className="story-step info"><b>4. RepoShield 决策</b><span>通过结构化动作、命中规则和证据引用解释为什么阻断。</span></div>
       </div>
       <div className="scenario-grid">
         {scenarios.map((scenario) => {

@@ -29,5 +29,6 @@ export const studioApi = {
   grant: (approvalId: string, actionHash: string) => request(`/api/approvals/${encodeURIComponent(approvalId)}/grant`, { method: "POST", body: JSON.stringify({ action_hash: actionHash, constraints: ["sandbox_only", "no_network"], granted_by: "studio" }) }),
   deny: (approvalId: string) => request(`/api/approvals/${encodeURIComponent(approvalId)}/deny`, { method: "POST", body: JSON.stringify({ denied_by: "studio" }) }),
   bench: () => request<BenchReport>("/api/bench/latest"),
-  exportEvidence: (runId: string) => request<{ output: string }>(`/api/export/evidence/${encodeURIComponent(runId)}`)
+  exportEvidence: (runId: string) => request<{ output: string }>(`/api/export/evidence/${encodeURIComponent(runId)}`),
+  clearRecords: (backup: boolean) => request<{ ok: boolean; backups: string[]; cleared: string[]; backup_enabled: boolean }>("/api/admin/clear-records", { method: "POST", body: JSON.stringify({ backup }) })
 };

@@ -33,7 +33,7 @@ export function SandboxEvidence({ events }: { events: StudioEvent[] }) {
   return (
     <div className="sandbox-evidence-view">
       <div className="sandbox-explainer">
-        <b>沙箱证据看什么？</b>
+        <b>沙箱预检看什么？</b>
         <span>这里展示危险动作在隔离环境里的“预演结果”：读了什么文件、想不想联网、会不会写入，以及这些现象如何支持最终决策。</span>
       </div>
       <div className="evidence-grid">

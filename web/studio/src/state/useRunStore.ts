@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { studioApi } from "../api/client";
-import { subscribeToRun } from "../api/events";
+import { subscribeToAllEvents } from "../api/events";
 import type { ActionDetail, ApprovalEvent, BenchReport, GraphEdge, GraphNode, RunSummary, ScenarioSpec, StudioEvent } from "../types";
 
 export function useRunStore() {
@@ -14,13 +14,35 @@ export function useRunStore() {
   const [approvals, setApprovals] = useState<ApprovalEvent[]>([]);
   const [bench, setBench] = useState<BenchReport>({ metrics: {}, samples: [] });
   const [health, setHealth] = useState<{ version: string; demo_mode: boolean } | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const [liveStatus, setLiveStatus] = useState<"syncing" | "live" | "error">("syncing");
   const sourceRef = useRef<EventSource | null>(null);
+  const runsRef = useRef<RunSummary[]>([]);
+  const selectedRunIdRef = useRef<string>("");
+  const refreshTimerRef = useRef<number | null>(null);
+  const graphTimerRef = useRef<number | null>(null);
 
-  const refreshRuns = useCallback(async () => {
-    const next = (await studioApi.runs()).runs;
-    setRuns(next);
-    if (!selectedRunId && next[0]) setSelectedRunId(next[0].run_id);
-  }, [selectedRunId]);
+  const refreshRuns = useCallback(async (options: { autoSelectLatest?: boolean } = {}) => {
+    setLiveStatus("syncing");
+    try {
+      const next = (await studioApi.runs()).runs;
+      const knownRunIds = new Set(runsRef.current.map((run) => run.run_id));
+      const latestRunId = next[0]?.run_id || "";
+      const hasNewLatestRun = Boolean(latestRunId && !knownRunIds.has(latestRunId));
+      runsRef.current = next;
+      setRuns(next);
+      if (latestRunId && (!selectedRunIdRef.current || (options.autoSelectLatest && hasNewLatestRun))) {
+        selectedRunIdRef.current = latestRunId;
+        setSelectedRunId(latestRunId);
+      }
+      setLastUpdatedAt(Date.now());
+      setLiveStatus("live");
+      return next;
+    } catch (error) {
+      setLiveStatus("error");
+      throw error;
+    }
+  }, []);
 
   const refreshSecondary = useCallback(async () => {
     const [healthResult, scenarioResult, approvalResult, benchResult] = await Promise.all([
@@ -33,17 +55,16 @@ export function useRunStore() {
     setScenarios(scenarioResult.scenarios);
     setApprovals(approvalResult.events);
     setBench(benchResult);
+    setLastUpdatedAt(Date.now());
   }, []);
 
   const selectRun = useCallback(async (runId: string) => {
     setSelectedRunId(runId);
+    selectedRunIdRef.current = runId;
     const [eventResult, graphResult] = await Promise.all([studioApi.events(runId), studioApi.graph(runId)]);
     setEvents(eventResult.events);
     setGraph(graphResult);
-    sourceRef.current?.close();
-    sourceRef.current = subscribeToRun(runId, (event) => {
-      setEvents((existing) => existing.some((item) => item.event_id === event.event_id) ? existing : [...existing, event]);
-    });
+    setLastUpdatedAt(Date.now());
   }, []);
 
   const inspectAction = useCallback(async (actionId: string) => {
@@ -76,10 +97,77 @@ export function useRunStore() {
     return result.output;
   }, [selectedRunId]);
 
+  const clearRecords = useCallback(async (backup: boolean) => {
+    const result = await studioApi.clearRecords(backup);
+    setRuns([]);
+    runsRef.current = [];
+    setSelectedRunId("");
+    selectedRunIdRef.current = "";
+    setEvents([]);
+    setGraph({ nodes: [], edges: [] });
+    setActionDetail(null);
+    setSelectedActionId("");
+    const approvalResult = await studioApi.approvals();
+    setApprovals(approvalResult.events);
+    return result;
+  }, []);
+
   useEffect(() => {
     refreshRuns();
     refreshSecondary();
-    return () => sourceRef.current?.close();
+    sourceRef.current = subscribeToAllEvents((event) => {
+      setLastUpdatedAt(Date.now());
+      setLiveStatus("live");
+      const knownRun = runsRef.current.some((run) => run.run_id === event.run_id);
+      const shouldFocusIncomingRun = Boolean(event.run_id && (!selectedRunIdRef.current || !knownRun || event.type === "gateway_pre_call"));
+      if (shouldFocusIncomingRun) {
+        selectedRunIdRef.current = event.run_id;
+        setSelectedRunId(event.run_id);
+        setEvents([event]);
+        setGraph({ nodes: [], edges: [] });
+      } else if (event.run_id === selectedRunIdRef.current) {
+        setEvents((existing) => existing.some((item) => item.event_id === event.event_id) ? existing : [...existing, event]);
+      }
+      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = window.setTimeout(() => {
+        refreshRuns({ autoSelectLatest: true }).catch(() => undefined);
+      }, 150);
+      if (event.run_id === selectedRunIdRef.current || shouldFocusIncomingRun) {
+        if (graphTimerRef.current) window.clearTimeout(graphTimerRef.current);
+        graphTimerRef.current = window.setTimeout(() => {
+          const currentRunId = selectedRunIdRef.current;
+          if (!currentRunId) return;
+          Promise.all([studioApi.events(currentRunId), studioApi.graph(currentRunId)]).then(([eventResult, graphResult]) => {
+            setEvents(eventResult.events);
+            setGraph(graphResult);
+            setLastUpdatedAt(Date.now());
+            setLiveStatus("live");
+          }).catch(() => setLiveStatus("error"));
+        }, 350);
+      }
+    });
+    const runsTimer = window.setInterval(() => {
+      refreshRuns({ autoSelectLatest: true }).then((nextRuns) => {
+        const currentRunId = selectedRunIdRef.current;
+        if (!currentRunId || !nextRuns.some((run) => run.run_id === currentRunId)) return;
+        Promise.all([studioApi.events(currentRunId), studioApi.graph(currentRunId)]).then(([eventResult, graphResult]) => {
+          setEvents(eventResult.events);
+          setGraph(graphResult);
+          setLastUpdatedAt(Date.now());
+          setLiveStatus("live");
+        }).catch(() => setLiveStatus("error"));
+      }).catch(() => undefined);
+    }, 2500);
+    const secondaryTimer = window.setInterval(() => {
+      refreshSecondary().catch(() => setLiveStatus("error"));
+    }, 15000);
+    return () => {
+      window.clearInterval(runsTimer);
+      window.clearInterval(secondaryTimer);
+      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
+      if (graphTimerRef.current) window.clearTimeout(graphTimerRef.current);
+      sourceRef.current?.close();
+    };
   }, [refreshRuns, refreshSecondary]);
 
   useEffect(() => {
@@ -100,6 +188,8 @@ export function useRunStore() {
     approvals,
     bench,
     health,
+    lastUpdatedAt,
+    liveStatus,
     refreshRuns,
     refreshSecondary,
     selectRun,
@@ -108,5 +198,6 @@ export function useRunStore() {
     grantApproval,
     denyApproval,
     exportEvidence,
+    clearRecords,
   };
 }
