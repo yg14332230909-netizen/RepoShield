@@ -43,6 +43,45 @@ export interface ActionDetail {
   instruction: Record<string, unknown>;
   sources: Array<Record<string, unknown>>;
   evidence_events: StudioEvent[];
+  policy_fact_set?: Record<string, unknown>;
+  policy_eval_trace?: PolicyEvalTrace;
+  policy_predicates?: PolicyPredicateRow[];
+  policy_lattice_path?: Array<Record<string, unknown>>;
+  policy_causal_graph?: PolicyCausalGraph;
+}
+
+export interface PolicyPredicateRow {
+  rule_id?: string;
+  rule_decision?: string;
+  rule_invariant?: boolean;
+  predicate_id?: string;
+  path?: string;
+  operator?: string;
+  expected?: unknown;
+  actual?: unknown;
+  matched?: boolean;
+  matched_fact_ids?: string[];
+  evidence_refs?: string[];
+}
+
+export interface PolicyCausalGraph {
+  fact_nodes?: Array<Record<string, unknown>>;
+  predicate_nodes?: Array<Record<string, unknown>>;
+  rule_nodes?: Array<Record<string, unknown>>;
+  lattice_nodes?: Array<Record<string, unknown>>;
+  edges?: Array<Record<string, unknown>>;
+}
+
+export interface PolicyEvalTrace extends PolicyCausalGraph {
+  action_id?: string;
+  policy_eval_trace_id?: string;
+  final_decision?: string;
+  engine_mode?: string;
+  policy_version?: string;
+  fact_hash?: string;
+  invariant_hits?: string[];
+  decision_lattice_path?: Array<Record<string, unknown>>;
+  skipped_rules_summary?: Record<string, unknown>;
 }
 
 export interface ScenarioSpec {

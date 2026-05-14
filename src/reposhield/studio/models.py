@@ -58,6 +58,11 @@ class ActionDetail:
     instruction: dict[str, Any] = field(default_factory=dict)
     sources: list[dict[str, Any]] = field(default_factory=list)
     evidence_events: list[dict[str, Any]] = field(default_factory=list)
+    policy_fact_set: dict[str, Any] = field(default_factory=dict)
+    policy_eval_trace: dict[str, Any] = field(default_factory=dict)
+    policy_predicates: list[dict[str, Any]] = field(default_factory=list)
+    policy_lattice_path: list[dict[str, Any]] = field(default_factory=list)
+    policy_causal_graph: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

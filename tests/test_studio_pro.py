@@ -48,6 +48,11 @@ def test_studio_normalizer_builds_runs_and_action_detail(tmp_path: Path):
     assert detail is not None
     assert detail.action["semantic_action"] == "install_git_dependency"
     assert detail.decision["decision"] == "block"
+    assert detail.policy_fact_set["fact_count"] > 0
+    assert detail.policy_eval_trace["policy_eval_trace_id"]
+    assert detail.policy_predicates
+    assert detail.policy_lattice_path
+    assert detail.policy_causal_graph["edges"]
     graph = graph_for_run(events, "run_test_attack")
     phases = {n["phase"] for n in graph["nodes"]}
     assert {"action", "policy"} <= phases

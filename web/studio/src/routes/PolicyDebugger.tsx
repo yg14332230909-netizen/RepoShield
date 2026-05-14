@@ -1,6 +1,8 @@
-import type { StudioEvent } from "../types";
+import { useMemo, useState } from "react";
+import type { PolicyEvalTrace, StudioEvent } from "../types";
 import { DecisionBadge, displayLabel } from "../components/DecisionBadge";
 import { actionLabel, reasonLabels } from "../components/displayText";
+import { factSetFromEvents, PolicyTraceDebugger, predicatesFromTrace, traceFromEvents } from "../components/PolicyTraceDebugger";
 
 function decisionEvents(events: StudioEvent[]): StudioEvent[] {
   return events.filter((event) => event.type === "policy_decision");
@@ -14,47 +16,64 @@ function explainDecision(decision: string): string {
   return "策略引擎根据动作、来源和证据给出了当前结论。";
 }
 
-function sourceLabel(sourceIds: unknown): string {
-  if (!Array.isArray(sourceIds) || !sourceIds.length) return "没有外部来源影响";
-  return sourceIds.map((item) => String(item).replace("src_attack_secret_exfil", "攻击 Issue").replace("src_attack_ci_poison", "可疑 PR 评论").replace("src_attack_dependency_confusion", "可疑 Issue")).join("、");
-}
-
-function evidenceLabel(value: unknown): string[] {
-  if (!Array.isArray(value) || !value.length) return ["策略规则本身"];
-  return value.map((item) => {
-    const raw = String(item);
-    if (raw.startsWith("trace_")) return "沙箱预检结果";
-    if (raw.startsWith("src_attack")) return "不可信外部文本";
-    return raw;
+function traceForDecision(events: StudioEvent[], decision: StudioEvent): PolicyEvalTrace | null {
+  const traceId = Array.isArray(decision.payload.evidence_refs)
+    ? decision.payload.evidence_refs.map(String).find((ref) => ref.startsWith("peval_"))
+    : "";
+  const trace = events.find((event) => {
+    if (event.type !== "policy_eval_trace") return false;
+    if (traceId && event.payload.policy_eval_trace_id === traceId) return true;
+    return event.payload.action_id === decision.payload.action_id;
   });
-}
-
-function ruleName(rule: Record<string, unknown>): string {
-  const id = String(rule.rule_id || rule.name || "");
-  if (id.includes("SECRET")) return "密钥保护规则";
-  if (id.includes("SANDBOX")) return "沙箱约束规则";
-  if (id.includes("PACKAGE")) return "依赖安全规则";
-  if (id.includes("CI")) return "发布流程保护规则";
-  return String(rule.name || rule.rule_id || "策略规则");
+  return (trace?.payload || traceFromEvents(events, String(decision.payload.action_id || ""))) as PolicyEvalTrace | null;
 }
 
 export function PolicyDebugger({ events }: { events: StudioEvent[] }) {
   const decisions = decisionEvents(events);
+  const [selectedAction, setSelectedAction] = useState<string>("all");
+  const visible = selectedAction === "all" ? decisions : decisions.filter((event) => event.payload.action_id === selectedAction);
+  const stats = useMemo(() => {
+    const blocked = decisions.filter((event) => event.payload.decision === "block").length;
+    const sandboxed = decisions.filter((event) => String(event.payload.decision || "").includes("sandbox")).length;
+    const traces = events.filter((event) => event.type === "policy_eval_trace").length;
+    const predicates = events.filter((event) => event.type === "policy_eval_trace").reduce((sum, event) => {
+      const nodes = Array.isArray(event.payload.predicate_nodes) ? event.payload.predicate_nodes.length : 0;
+      return sum + nodes;
+    }, 0);
+    return { blocked, sandboxed, traces, predicates };
+  }, [decisions, events]);
+
   if (!decisions.length) return <div className="empty-state">当前运行还没有策略决策。运行一个场景后，这里会解释每个动作为什么被放行、沙箱、审批或阻断。</div>;
+
   return (
     <div className="policy-debugger">
       <div className="policy-explainer">
-        <b>拦截原因看什么？</b>
-        <span>这里把“动作是什么、为什么危险、命中了哪条规则、证据来自哪里”拆开说明，帮助判断这是合理拦截还是误报。</span>
+        <b>完整 Policy Debugger 看什么？</b>
+        <span>上半部分是人能读懂的结论，下半部分把 PolicyGraph 的事实、规则谓词、决策格路径和因果图串起来，方便定位误报、漏报或规则缺口。</span>
       </div>
-      {decisions.map((event) => {
+
+      <div className="policy-debug-metrics">
+        <div><span>策略决策</span><b>{decisions.length}</b></div>
+        <div><span>阻断动作</span><b>{stats.blocked}</b></div>
+        <div><span>沙箱相关</span><b>{stats.sandboxed}</b></div>
+        <div><span>谓词检查</span><b>{stats.predicates}</b></div>
+      </div>
+
+      <div className="rule-filter" aria-label="筛选动作">
+        <button className={selectedAction === "all" ? "active" : ""} onClick={() => setSelectedAction("all")}>全部动作</button>
+        {decisions.map((event) => {
+          const actionId = String(event.payload.action_id || event.event_id);
+          return <button className={selectedAction === actionId ? "active" : ""} key={event.event_id} onClick={() => setSelectedAction(actionId)}>{actionLabel(event.payload.semantic_action || actionId)}</button>;
+        })}
+      </div>
+
+      {visible.map((event) => {
         const payload = event.payload;
         const decision = String(payload.decision || "decision");
         const action = actionLabel(payload.semantic_action || payload.action_id);
         const reasons = reasonLabels(payload.reason_codes);
-        const matchedRules = Array.isArray(payload.matched_rules) ? payload.matched_rules as Record<string, unknown>[] : [];
-        const traces = Array.isArray(payload.rule_trace) ? payload.rule_trace as Record<string, unknown>[] : [];
-        const sourceIds = traces.flatMap((trace) => Array.isArray(trace.source_ids) ? trace.source_ids : []);
+        const trace = traceForDecision(events, event);
+        const factSet = factSetFromEvents(events, String(payload.action_id || ""), trace?.policy_eval_trace_id);
         return (
           <div className={`policy-card ${event.severity}`} key={event.event_id}>
             <div className="policy-card-head">
@@ -70,7 +89,7 @@ export function PolicyDebugger({ events }: { events: StudioEvent[] }) {
               <section>
                 <b>1. 代理想做什么</b>
                 <span>{action}</span>
-                <small>风险级别：{displayLabel(String(traces[0]?.risk || "unknown"))}</small>
+                <small>风险分：{String(payload.risk_score || "未知")}</small>
               </section>
               <section>
                 <b>2. 为什么触发策略</b>
@@ -79,26 +98,20 @@ export function PolicyDebugger({ events }: { events: StudioEvent[] }) {
                 </div>
               </section>
               <section>
-                <b>3. 证据来自哪里</b>
-                <span>{sourceLabel(sourceIds)}</span>
-                <small>{evidenceLabel(payload.evidence_refs).join("、")}</small>
+                <b>3. PolicyGraph 证据</b>
+                <span>{trace ? `${trace.fact_nodes?.length || 0} 个事实、${trace.rule_nodes?.length || 0} 条规则` : "等待评估轨迹"}</span>
+                <small>{trace?.policy_eval_trace_id || "未找到 policy_eval_trace"}</small>
               </section>
             </div>
 
-            <div className="matched-rule-list">
-              <b>命中的规则</b>
-              {matchedRules.length ? matchedRules.map((rule, index) => (
-                <div className="matched-rule" key={`${event.event_id}-${index}`}>
-                  <span>{ruleName(rule)}</span>
-                  <DecisionBadge label={String(rule.decision || decision)} severity={event.severity} />
-                </div>
-              )) : <span className="muted">没有额外规则明细。</span>}
-            </div>
-
-            <details className="raw-graph">
-              <summary>查看原始策略轨迹</summary>
-              <pre>{JSON.stringify({ matched_rules: payload.matched_rules, evidence_refs: payload.evidence_refs, rule_trace: payload.rule_trace }, null, 2)}</pre>
-            </details>
+            <PolicyTraceDebugger
+              trace={trace}
+              predicates={predicatesFromTrace(trace)}
+              factSet={factSet}
+              decision={payload}
+              action={payload}
+              title="运行级 Policy Debugger"
+            />
           </div>
         );
       })}

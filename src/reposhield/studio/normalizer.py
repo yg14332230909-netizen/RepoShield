@@ -136,11 +136,50 @@ def build_action_detail(events: list[StudioEvent], action_id: str) -> ActionDeta
             detail.runtime = dict(event.payload)
         elif event.type == "instruction_ir":
             detail.instruction = dict(event.payload)
+        elif event.type == "policy_fact_set":
+            detail.policy_fact_set = dict(event.payload)
+        elif event.type == "policy_eval_trace":
+            detail.policy_eval_trace = dict(event.payload)
+            detail.policy_predicates = _predicate_matrix(event.payload)
+            detail.policy_lattice_path = list(event.payload.get("decision_lattice_path") or [])
+            detail.policy_causal_graph = {
+                "fact_nodes": list(event.payload.get("fact_nodes") or []),
+                "predicate_nodes": list(event.payload.get("predicate_nodes") or []),
+                "rule_nodes": list(event.payload.get("rule_nodes") or []),
+                "lattice_nodes": list(event.payload.get("lattice_nodes") or []),
+                "edges": list(event.payload.get("edges") or []),
+            }
         detail.evidence_events.append(event.to_dict())
     for event in events:
         if event.type == "source_ingested" and event.payload.get("source_id") in source_ids:
             detail.sources.append(event.payload)
     return detail
+
+
+def _predicate_matrix(trace: dict[str, Any]) -> list[dict[str, Any]]:
+    rules = {str(rule.get("rule_id") or rule.get("id")): rule for rule in trace.get("rule_nodes") or [] if isinstance(rule, dict)}
+    rows: list[dict[str, Any]] = []
+    for predicate in trace.get("predicate_nodes") or []:
+        if not isinstance(predicate, dict):
+            continue
+        rule_id = str(predicate.get("rule_id") or "")
+        rule = rules.get(rule_id, {})
+        rows.append(
+            {
+                "rule_id": rule_id,
+                "rule_decision": rule.get("decision"),
+                "rule_invariant": bool(rule.get("invariant")),
+                "predicate_id": predicate.get("predicate_id") or predicate.get("id") or predicate.get("fact_id"),
+                "path": predicate.get("path") or ".".join(str(part) for part in (predicate.get("namespace"), predicate.get("key")) if part),
+                "operator": predicate.get("operator") or "fact_match",
+                "expected": predicate.get("expected"),
+                "actual": predicate.get("actual", predicate.get("value")),
+                "matched": bool(predicate.get("matched")),
+                "matched_fact_ids": list(predicate.get("matched_fact_ids") or ([predicate["fact_id"]] if predicate.get("fact_id") else [])),
+                "evidence_refs": list(predicate.get("evidence_refs") or []),
+            }
+        )
+    return rows
 
 
 def graph_for_run(events: list[StudioEvent], run_id: str) -> dict[str, Any]:

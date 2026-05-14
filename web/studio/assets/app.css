@@ -774,6 +774,219 @@ h3 {
   background: #fff;
 }
 
+.policy-trace-debugger {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.policy-trace-debugger.compact {
+  padding: 10px;
+}
+
+.policy-trace-head,
+.policy-rule-debug-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.policy-trace-head h3 {
+  margin: 2px 0 6px;
+}
+
+.policy-trace-head p {
+  margin: 0;
+  color: #475467;
+  font-size: 14px;
+}
+
+.policy-debug-empty {
+  padding: 12px;
+  color: var(--muted);
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.policy-debug-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.policy-debug-metrics > div {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.policy-debug-metrics span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.policy-debug-metrics b {
+  font-size: 22px;
+}
+
+.rule-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rule-filter button {
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.rule-filter button.active {
+  color: #fff;
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.policy-rule-debug-list {
+  display: grid;
+  gap: 10px;
+}
+
+.policy-rule-debug-card {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.policy-rule-debug-head b,
+.lattice-path > b {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.policy-rule-debug-head span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.predicate-table {
+  display: grid;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.predicate-row {
+  display: grid;
+  grid-template-columns: minmax(118px, .9fr) minmax(140px, 1fr) minmax(150px, 1.2fr) 74px;
+  min-width: 640px;
+}
+
+.predicate-row > span {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 9px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.predicate-row > span:last-child {
+  border-right: 0;
+}
+
+.predicate-head > span {
+  color: var(--muted);
+  background: #f8fafc;
+  font-weight: 800;
+}
+
+.predicate-row small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.predicate-ok,
+.predicate-miss {
+  font-weight: 900;
+}
+
+.predicate-ok {
+  color: var(--green);
+  background: var(--green-bg);
+}
+
+.predicate-miss {
+  color: var(--amber);
+  background: var(--amber-bg);
+}
+
+.lattice-path {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.lattice-path > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lattice-path span {
+  display: grid;
+  gap: 2px;
+  min-width: 150px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  font-weight: 800;
+}
+
+.lattice-path small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.causal-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.causal-summary span {
+  padding: 5px 8px;
+  color: #475467;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .approval-center {
   display: grid;
   gap: 14px;

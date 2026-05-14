@@ -1,6 +1,7 @@
 import type { ActionDetail } from "../types";
 import { DecisionBadge, displayLabel } from "./DecisionBadge";
 import { actionLabel, reasonLabels, shortId } from "./displayText";
+import { factSetFromEvents, PolicyTraceDebugger, predicatesFromTrace, traceFromEvents } from "./PolicyTraceDebugger";
 
 function sourcesText(sources: Array<Record<string, unknown>>): string {
   if (!sources.length) return "没有外部来源影响";
@@ -37,6 +38,9 @@ export function ActionDetailDrawer({ detail }: { detail: ActionDetail | null }) 
   const semanticAction = actionLabel(action.semantic_action || detail.action_id);
   const reasons = reasonLabels(decision.reason_codes);
   const rules = ruleNames(decision);
+  const trace = detail.policy_eval_trace || traceFromEvents(detail.evidence_events, detail.action_id);
+  const factSet = detail.policy_fact_set || factSetFromEvents(detail.evidence_events, detail.action_id, trace?.policy_eval_trace_id);
+  const predicates = detail.policy_predicates?.length ? detail.policy_predicates : predicatesFromTrace(trace);
   return (
     <div id="action-detail" className="action-detail-view">
       <section className="action-summary-card">
@@ -53,6 +57,15 @@ export function ActionDetailDrawer({ detail }: { detail: ActionDetail | null }) 
         <div><b>来源影响</b><span>{sourcesText(detail.sources)}</span></div>
         <div><b>命中规则</b><span>{rules.length ? rules.join("、") : "没有规则明细"}</span></div>
       </section>
+      <PolicyTraceDebugger
+        trace={trace}
+        predicates={predicates}
+        factSet={factSet}
+        decision={decision}
+        action={action}
+        title="动作级 Policy Debugger"
+        compact
+      />
       <details className="raw-graph">
         <summary>查看取证细节</summary>
         <section className="detail-section"><h3>来源信任</h3><pre>{JSON.stringify(detail.sources, null, 2)}</pre></section>
