@@ -19,9 +19,7 @@ DECISION_RANK: dict[Decision, int] = {
 class DecisionLattice:
     def merge(self, baseline: PolicyDecision, hits: list[RuleHit]) -> tuple[PolicyDecision, list[dict[str, Any]]]:
         decision: Decision = baseline.decision
-        path: list[dict[str, Any]] = [
-            {"from": None, "to": baseline.decision, "via": "legacy_baseline", "rank": DECISION_RANK[baseline.decision]}
-        ]
+        path: list[dict[str, Any]] = [{"from": None, "to": baseline.decision, "via": "policygraph_baseline", "rank": DECISION_RANK[baseline.decision]}]
         reasons = list(baseline.reason_codes)
         controls = list(baseline.required_controls)
         risk_score = baseline.risk_score

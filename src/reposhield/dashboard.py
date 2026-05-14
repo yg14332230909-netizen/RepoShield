@@ -106,4 +106,11 @@ def _evidence_chains(events: list[dict]) -> dict[str, dict[str, list[str]]]:
             decision = str(payload.get("decision") or "")
             if decision and decision not in chain["decisions"]:
                 chain["decisions"].append(decision)
+        elif event.get("event_type") == "policy_eval_trace":
+            for rid in payload.get("invariant_hits", []) or []:
+                if rid and rid not in chain["rules"]:
+                    chain["rules"].append(str(rid))
+            decision = str(payload.get("final_decision") or "")
+            if decision and decision not in chain["decisions"]:
+                chain["decisions"].append(decision)
     return chains

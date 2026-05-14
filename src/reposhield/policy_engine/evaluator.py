@@ -31,9 +31,16 @@ class RuleEvaluator:
         match = rule.match
         for key, expected in match.items():
             namespace, _, fact_key = key.partition(".")
-            values = facts.values(namespace, fact_key.removesuffix("_any"))
+            fact_key = fact_key.removesuffix("_any")
+            if namespace == "action" and fact_key == "semantic":
+                fact_key = "semantic_action"
+            values = facts.values(namespace, fact_key)
             if key.endswith("_any"):
                 expected_values = set(expected if isinstance(expected, list) else [expected])
+                if not any(value in expected_values for value in values):
+                    return False
+            elif isinstance(expected, list):
+                expected_values = set(expected)
                 if not any(value in expected_values for value in values):
                     return False
             else:

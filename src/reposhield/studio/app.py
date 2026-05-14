@@ -29,9 +29,9 @@ def render_studio_html(
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    policy_hits = [e for e in events if e.get("event_type") in {"policy_decision", "policy_runtime"}]
+    policy_hits = [e for e in events if e.get("event_type") in {"policy_decision", "policy_eval_trace", "policy_runtime"}]
     instructions = [e for e in events if e.get("event_type") == "instruction_ir"]
-    traces = [e for e in events if e.get("event_type") in {"gateway_pre_call", "gateway_post_call", "gateway_response", "instruction_ir", "action_parsed", "exec_trace", "policy_decision", "policy_runtime"}]
+    traces = [e for e in events if e.get("event_type") in {"gateway_pre_call", "gateway_post_call", "gateway_response", "instruction_ir", "action_parsed", "exec_trace", "policy_decision", "policy_eval_trace", "policy_runtime"}]
 
     html_doc = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>{html.escape(title)}</title>
 <style>
@@ -81,7 +81,7 @@ def _event_table(events: list[dict[str, Any]]) -> str:
 def _compact(payload: Any) -> Any:
     if not isinstance(payload, dict):
         return payload
-    keys = ["trace_id", "turn_id", "kind", "instruction_type", "instruction_category", "semantic_action", "raw_action", "decision", "risk_score", "reason_codes", "effective_decision", "mode", "warning", "blocked_count"]
+    keys = ["trace_id", "turn_id", "kind", "instruction_type", "instruction_category", "semantic_action", "raw_action", "decision", "final_decision", "risk_score", "reason_codes", "invariant_hits", "effective_decision", "mode", "warning", "blocked_count"]
     out = {k: payload[k] for k in keys if k in payload}
     if not out and "security_type" in payload:
         out = {"instruction_id": payload.get("instruction_id"), "kind": payload.get("kind"), "security_type": payload.get("security_type"), "metadata": payload.get("metadata")}

@@ -47,7 +47,7 @@ class PolicyFactSet:
 
     def __post_init__(self) -> None:
         payload = [asdict(f) for f in self.facts]
-        # Ignore generated fact ids for stable comparison across legacy/shadow runs.
+        # Ignore generated fact ids for stable comparison across runs.
         stable_payload = [{k: v for k, v in item.items() if k != "fact_id"} for item in payload]
         self.content_hash = sha256_json(stable_payload)
         self.fact_set_id = f"factset_{self.content_hash.removeprefix('sha256:')[:16]}"

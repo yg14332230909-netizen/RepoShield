@@ -7,20 +7,22 @@ from reposhield.policy import PolicyEngine
 from reposhield.policy_config import ConfigurablePolicyOverrides
 
 
-def test_shadow_mode_keeps_legacy_decision_but_records_policygraph_diff(tmp_path):
+def test_policygraph_is_the_only_engine_and_records_eval_trace(tmp_path):
     (tmp_path / ".env").write_text("TOKEN=x", encoding="utf-8")
     contract = TaskContractBuilder().build("fix login")
     graph = AssetScanner(tmp_path, env={}).scan()
     action = ActionParser().parse("tail .env", cwd=tmp_path)
     action.semantic_action = "read_project_file"
-    engine = PolicyEngine(mode="policygraph-shadow")
+    engine = PolicyEngine(mode="legacy")
 
     decision = engine.decide(contract, action, graph, ContextProvenance().graph)
     events = engine.consume_eval_events()
 
-    assert decision.decision == "allow"
+    assert decision.decision == "block"
+    assert decision.policy_version == "reposhield-policygraph-v0.4"
     assert events
-    assert events[-1]["shadow_diff"]["kind"] == "new_block"
+    assert events[-1]["engine_mode"] == "policygraph-enforce"
+    assert events[-1]["invariant_hits"] == ["INV-SECRET-001"]
 
 
 def test_invariant_decision_cannot_be_downgraded_by_admin_signed_override():
