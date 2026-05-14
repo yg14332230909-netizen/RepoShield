@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 from ..models import PolicyDecision
+from ..policy_engine.compiler import VALID_DECISIONS as VALID_GRAPH_DECISIONS
+from ..policy_engine.compiler import VALID_OPERATORS
 
 PolicyMode = Literal["enforce", "observe_only", "warn", "disabled"]
 VALID_POLICY_MODES: set[str] = {"enforce", "observe_only", "warn", "disabled"}
@@ -86,6 +88,8 @@ def validate_policy_pack(data: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     if not isinstance(data, dict):
         return ["policy pack must be an object"]
+    if str(data.get("version", "")).startswith("reposhield-policygraph"):
+        return _validate_policygraph_pack(data)
     if not data.get("name") or not isinstance(data.get("name"), str):
         errors.append("name is required and must be a string")
     mode = data.get("mode", "enforce")
@@ -114,4 +118,39 @@ def validate_policy_pack(data: dict[str, Any]) -> list[str]:
             errors.append(f"{prefix}.decision must be one of {sorted(VALID_POLICY_DECISIONS)}")
         if rule.get("unsafe_override") and not (rule.get("trusted_admin_policy") or rule.get("admin_signed")):
             errors.append(f"{prefix}.unsafe_override requires trusted_admin_policy or admin_signed")
+    return errors
+
+
+def _validate_policygraph_pack(data: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(data.get("name"), str) or not data.get("name"):
+        errors.append("name is required and must be a string")
+    rules = data.get("rules", [])
+    if not isinstance(rules, list):
+        return ["rules must be a list"]
+    for idx, rule in enumerate(rules):
+        prefix = f"rules[{idx}]"
+        if not isinstance(rule, dict):
+            errors.append(f"{prefix} must be an object")
+            continue
+        if not rule.get("rule_id"):
+            errors.append(f"{prefix}.rule_id is required")
+        if rule.get("decision") not in VALID_GRAPH_DECISIONS:
+            errors.append(f"{prefix}.decision must be one of {sorted(VALID_GRAPH_DECISIONS)}")
+        if not isinstance(rule.get("match", {}), dict):
+            errors.append(f"{prefix}.match must be an object")
+        for pidx, pred in enumerate(rule.get("predicates", []) or []):
+            if not isinstance(pred, dict):
+                errors.append(f"{prefix}.predicates[{pidx}] must be an object")
+                continue
+            if not pred.get("path"):
+                errors.append(f"{prefix}.predicates[{pidx}].path is required")
+            op = str(pred.get("operator") or "eq")
+            if op not in VALID_OPERATORS:
+                errors.append(f"{prefix}.predicates[{pidx}].operator must be one of {sorted(VALID_OPERATORS)}")
+        unless = rule.get("unless", [])
+        unless_items = unless if isinstance(unless, list) else [unless] if unless else []
+        for uidx, item in enumerate(unless_items):
+            if not isinstance(item, dict):
+                errors.append(f"{prefix}.unless[{uidx}] must be an object")
     return errors

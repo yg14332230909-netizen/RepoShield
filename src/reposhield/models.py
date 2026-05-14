@@ -228,6 +228,7 @@ class ExecTrace:
     risk_observed: list[str] = field(default_factory=list)
     recommended_decision: Decision = "allow"
     trace_complete: bool = True
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

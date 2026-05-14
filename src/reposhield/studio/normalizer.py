@@ -20,6 +20,7 @@ PHASES = {
     "mcp_invocation": "evidence",
     "memory_event": "evidence",
     "exec_trace": "sandbox",
+    "policy_fact_set": "policy",
     "policy_decision": "policy",
     "policy_eval_trace": "policy",
     "policy_runtime": "policy",
@@ -163,6 +164,8 @@ def graph_for_run(events: list[StudioEvent], run_id: str) -> dict[str, Any]:
 def _span_id(event_type: str, payload: dict[str, Any], event: dict[str, Any], index: int) -> str:
     if event_type == "policy_decision":
         return str(event.get("decision_id") or payload.get("decision_id") or event.get("event_id") or f"decision_{index}")
+    if event_type == "policy_fact_set":
+        return str(payload.get("fact_set_id") or event.get("event_id") or f"policy_fact_set_{index}")
     if event_type == "policy_eval_trace":
         return str(payload.get("policy_eval_trace_id") or event.get("event_id") or f"policy_eval_{index}")
     if event_type == "policy_runtime":
@@ -187,7 +190,7 @@ def _payload_for_ui(event_type: str, payload: dict[str, Any], event: dict[str, A
 
 
 def _parent_span(event_type: str, payload: dict[str, Any], event: dict[str, Any]) -> str | None:
-    if event_type in {"policy_decision", "policy_eval_trace", "policy_runtime", "exec_trace", "secret_event", "package_event"}:
+    if event_type in {"policy_decision", "policy_fact_set", "policy_eval_trace", "policy_runtime", "exec_trace", "secret_event", "package_event"}:
         return str(event.get("action_id") or payload.get("action_id") or "") or None
     if event_type == "action_parsed":
         return str(payload.get("instruction_id") or payload.get("lowered_from_instruction_id") or "") or None

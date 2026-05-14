@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import asdict, replace
+from pathlib import Path
 from typing import Any
 
 from ..contract import IntentMatcher
@@ -42,7 +43,7 @@ class PolicyGraphEngine:
         self.extractor = FactExtractor()
         self.invariants = InvariantEngine()
         self.lattice = DecisionLattice()
-        compiled = PolicyRuleCompiler().compile(domain_rules or self._default_domain_rules())
+        compiled = PolicyRuleCompiler().compile(domain_rules or self._load_domain_rules())
         self.rule_index = RuleIndex(compiled)
         self.evaluator = RuleEvaluator()
 
@@ -69,9 +70,15 @@ class PolicyGraphEngine:
 
     def plan_preflight(self, decision: PolicyDecision) -> PreflightPlan:
         controls = set(decision.required_controls)
-        required = bool(controls & {"sandbox_preflight", "package_preflight", "network_allowlist", "network_off", "human_approval"}) or decision.decision in {"sandbox_then_approval", "block"}
-        profile = "network-off" if "network_off" in controls or "no_egress" in controls else "dry-run"
-        return PreflightPlan(required=required, profile=profile, evidence_mode="summary", reason_codes=decision.reason_codes, required_controls=decision.required_controls)
+        required = bool(controls & {"sandbox_preflight", "package_preflight", "network_allowlist", "network_off", "human_approval"})
+        run_even_if_blocked = os.environ.get("REPOSHIELD_PREFLIGHT_BLOCKED", "").lower() in {"1", "true", "full", "evidence"}
+        if decision.decision == "sandbox_then_approval":
+            required = True
+        if decision.decision == "block" and run_even_if_blocked:
+            required = True
+        profile = "package_preflight" if "package_preflight" in controls else "network-off" if "network_off" in controls or "no_egress" in controls else "dry-run"
+        evidence_mode = "full" if run_even_if_blocked else "summary"
+        return PreflightPlan(required=required, profile=profile, evidence_mode=evidence_mode, run_even_if_blocked=run_even_if_blocked, decision_phase="pre_decide", reason_codes=decision.reason_codes, required_controls=decision.required_controls)
 
     def _decorate_decision(
         self,
@@ -195,240 +202,14 @@ class PolicyGraphEngine:
         return decision.explanation
 
     @staticmethod
-    def _default_domain_rules() -> list[dict[str, Any]]:
-        return [
-            {
-                "rule_id": "RS-SECRET-001",
-                "name": "secret_read_hard_deny",
-                "category": "secret",
-                "match": {"action.semantic_action": "read_secret_file"},
-                "decision": "block",
-                "risk_score": 100,
-                "reason_codes": ["hard_deny_read_secret"],
-                "required_controls": ["block"],
-            },
-            {
-                "rule_id": "RS-EGRESS-001",
-                "name": "secret_tainted_network_hard_deny",
-                "category": "egress",
-                "match": {"action.semantic_action": "send_network_request", "secret.event_any": ["egress_after_secret", "token_like_value_in_tool_args"]},
-                "decision": "block",
-                "risk_score": 100,
-                "reason_codes": ["hard_deny_secret_egress"],
-                "required_controls": ["block", "no_egress"],
-            },
-            {
-                "rule_id": "RS-MEM-001",
-                "name": "memory_denied_high_risk_action",
-                "category": "memory",
-                "match": {"memory.authorization_denied": True, "action.high_risk": True},
-                "decision": "block",
-                "risk_score": 90,
-                "reason_codes": ["memory_authorization_denied"],
-                "required_controls": ["memory_taint_gate", "block"],
-            },
-            {
-                "rule_id": "RS-RELEASE-001",
-                "name": "release_or_force_push_requires_double_approval",
-                "category": "release",
-                "match": {"action.semantic_any": ["publish_artifact", "git_push_force"]},
-                "decision": "block",
-                "risk_score": 95,
-                "reason_codes": ["requires_double_approval"],
-                "required_controls": ["block", "double_approval", "dry_run_only"],
-            },
-            {
-                "rule_id": "RS-REGISTRY-001",
-                "name": "registry_config_change_blocked",
-                "category": "registry",
-                "match": {"action.semantic_action": "modify_registry_config"},
-                "decision": "block",
-                "risk_score": 92,
-                "reason_codes": ["registry_config_change"],
-                "required_controls": ["block_or_admin_approval"],
-            },
-            {
-                "rule_id": "RS-CI-001",
-                "name": "untrusted_source_cannot_modify_ci",
-                "category": "ci",
-                "match": {"action.semantic_action": "modify_ci_pipeline", "source.has_untrusted": True},
-                "decision": "block",
-                "risk_score": 92,
-                "reason_codes": ["untrusted_source_cannot_modify_ci"],
-                "required_controls": ["block_or_human_approval"],
-            },
-            {
-                "rule_id": "RS-SC-001",
-                "name": "untrusted_remote_dependency_install",
-                "category": "supply_chain",
-                "match": {"action.semantic_any": ["install_git_dependency", "install_tarball_dependency"], "source.has_untrusted": True},
-                "decision": "block",
-                "risk_score": 95,
-                "reason_codes": ["untrusted_source_cannot_authorize_dependency_install"],
-                "required_controls": ["block", "package_preflight"],
-            },
-            {
-                "rule_id": "RS-SC-002",
-                "name": "contract_mismatch_remote_dependency_install",
-                "category": "supply_chain",
-                "match": {"action.semantic_any": ["install_git_dependency", "install_tarball_dependency"], "contract.match_any": ["violation", "unknown"]},
-                "decision": "block",
-                "risk_score": 95,
-                "reason_codes": ["untrusted_source_cannot_authorize_dependency_install"],
-                "required_controls": ["block", "package_preflight"],
-            },
-            {
-                "rule_id": "RS-SC-003",
-                "name": "remote_dependency_requires_preflight",
-                "category": "supply_chain",
-                "match": {"action.semantic_any": ["install_git_dependency", "install_tarball_dependency"]},
-                "decision": "sandbox_then_approval",
-                "risk_score": 87,
-                "reason_codes": [],
-                "required_controls": ["package_preflight", "network_off", "human_approval"],
-            },
-            {
-                "rule_id": "RS-SC-004",
-                "name": "registry_install_requires_preflight",
-                "category": "supply_chain",
-                "match": {"action.semantic_action": "install_registry_dependency"},
-                "decision": "sandbox_then_approval",
-                "risk_score": 78,
-                "reason_codes": [],
-                "required_controls": ["package_preflight", "network_allowlist", "secret_mount_masked", "human_approval"],
-            },
-            {
-                "rule_id": "RS-NET-001",
-                "name": "untrusted_source_cannot_authorize_network",
-                "category": "egress",
-                "match": {"action.semantic_action": "send_network_request", "source.has_untrusted": True},
-                "decision": "block",
-                "risk_score": 90,
-                "reason_codes": ["untrusted_source_cannot_authorize_network"],
-                "required_controls": ["block", "no_egress"],
-            },
-            {
-                "rule_id": "RS-NET-002",
-                "name": "trusted_network_requires_approval",
-                "category": "egress",
-                "match": {"action.semantic_action": "send_network_request"},
-                "decision": "sandbox_then_approval",
-                "risk_score": 78,
-                "reason_codes": [],
-                "required_controls": ["network_allowlist", "human_approval"],
-            },
-            {
-                "rule_id": "RS-MCP-001",
-                "name": "destructive_mcp_tool_blocked",
-                "category": "mcp",
-                "match": {"action.semantic_action": "invoke_destructive_mcp_tool"},
-                "decision": "block",
-                "risk_score": 90,
-                "reason_codes": ["destructive_mcp_tool"],
-                "required_controls": ["mcp_proxy", "human_approval"],
-            },
-            {
-                "rule_id": "RS-MCP-002",
-                "name": "mcp_proxy_blocked_invocation",
-                "category": "mcp",
-                "match": {"action.semantic_action": "invoke_mcp_tool", "mcp.decision": "blocked"},
-                "decision": "block",
-                "risk_score": 88,
-                "reason_codes": ["mcp_proxy_blocked"],
-                "required_controls": ["mcp_proxy"],
-            },
-            {
-                "rule_id": "RS-MEM-002",
-                "name": "tainted_memory_write_is_sandboxed",
-                "category": "memory",
-                "match": {"action.semantic_action": "memory_write", "source.has_untrusted": True},
-                "decision": "allow_in_sandbox",
-                "risk_score": 60,
-                "reason_codes": ["tainted_memory_write"],
-                "required_controls": ["memory_taint", "ttl"],
-            },
-            {
-                "rule_id": "RS-MEM-003",
-                "name": "trusted_memory_write_allowed_with_ttl",
-                "category": "memory",
-                "match": {"action.semantic_action": "memory_write"},
-                "decision": "allow",
-                "risk_score": 35,
-                "reason_codes": [],
-                "required_controls": ["memory_ttl"],
-            },
-            {
-                "rule_id": "RS-MEM-004",
-                "name": "memory_read_is_sandbox_context",
-                "category": "memory",
-                "match": {"action.semantic_action": "memory_read"},
-                "decision": "allow_in_sandbox",
-                "risk_score": 45,
-                "reason_codes": ["memory_read_as_context"],
-                "required_controls": ["memory_taint_check"],
-            },
-            {
-                "rule_id": "DSL-SANDBOX-UNKNOWN-001",
-                "name": "unknown_side_effect_requires_preflight",
-                "category": "parser",
-                "match": {"action.semantic_action": "unknown_side_effect"},
-                "decision": "sandbox_then_approval",
-                "risk_score": 82,
-                "reason_codes": ["default_fail_closed"],
-                "required_controls": ["sandbox_preflight", "human_approval"],
-            },
-            {
-                "rule_id": "RS-EDIT-001",
-                "name": "contract_matched_source_edit_allowed",
-                "category": "edit",
-                "match": {"action.semantic_action": "edit_source_file", "contract.match_any": ["match", "partial_match"]},
-                "decision": "allow",
-                "risk_score": 35,
-                "reason_codes": [],
-                "required_controls": ["record_diff"],
-            },
-            {
-                "rule_id": "RS-EDIT-002",
-                "name": "out_of_contract_source_edit_requires_approval",
-                "category": "edit",
-                "match": {"action.semantic_action": "edit_source_file", "contract.match_any": ["violation", "unknown"]},
-                "decision": "sandbox_then_approval",
-                "risk_score": 70,
-                "reason_codes": [],
-                "required_controls": ["record_diff", "human_approval"],
-            },
-            {
-                "rule_id": "RS-SANDBOX-001",
-                "name": "contract_matched_tests_run_in_sandbox",
-                "category": "sandbox",
-                "match": {"action.semantic_action": "run_tests", "contract.match_any": ["match", "partial_match"]},
-                "decision": "allow_in_sandbox",
-                "risk_score": 40,
-                "reason_codes": [],
-                "required_controls": ["sandbox_preflight"],
-            },
-            {
-                "rule_id": "RS-SANDBOX-002",
-                "name": "out_of_contract_tests_require_approval",
-                "category": "sandbox",
-                "match": {"action.semantic_action": "run_tests", "contract.match_any": ["violation", "unknown"]},
-                "decision": "sandbox_then_approval",
-                "risk_score": 70,
-                "reason_codes": [],
-                "required_controls": ["sandbox_preflight", "human_approval"],
-            },
-            {
-                "rule_id": "RS-READ-001",
-                "name": "project_file_read_allowed",
-                "category": "read",
-                "match": {"action.semantic_action": "read_project_file"},
-                "decision": "allow",
-                "risk_score": 30,
-                "reason_codes": [],
-                "required_controls": [],
-            },
-        ]
-
+    def _load_domain_rules() -> list[dict[str, Any]]:
+        pack = os.environ.get("REPOSHIELD_POLICY_PACK")
+        path = Path(pack) if pack else Path(__file__).with_name("policies") / "core_coding_agent.yaml"
+        data = _load_policy_yaml(path)
+        rules = data.get("rules", []) if isinstance(data, dict) else []
+        if not isinstance(rules, list):
+            raise ValueError(f"policy pack rules must be a list: {path}")
+        return [dict(rule) for rule in rules]
 
 class PolicyEngine:
     """Backward-compatible PolicyEngine entrypoint backed only by PolicyGraph."""
@@ -439,6 +220,7 @@ class PolicyEngine:
             self.mode = "policygraph-enforce"
         self.policygraph = PolicyGraphEngine()
         self._eval_events: list[dict[str, Any]] = []
+        self._fact_events: list[dict[str, Any]] = []
 
     @property
     def policy_version(self) -> str:
@@ -458,9 +240,52 @@ class PolicyEngine:
         graph_decision, trace = self.policygraph.decide(ctx, mode=self.mode)
         event = trace.to_dict()
         self._eval_events.append(event)
+        self._fact_events.append({
+            "fact_set_id": trace.fact_set_id,
+            "fact_hash": trace.fact_hash,
+            "fact_count": len(trace.fact_nodes),
+            "namespace_counts": _fact_namespace_counts(trace.fact_nodes),
+            "summary": _fact_summary(trace.fact_nodes),
+            "policy_eval_trace_id": trace.policy_eval_trace_id,
+        })
         return graph_decision
+
+    def plan_preflight(self, decision: PolicyDecision) -> PreflightPlan:
+        return self.policygraph.plan_preflight(decision)
 
     def consume_eval_events(self) -> list[dict[str, Any]]:
         events = self._eval_events
         self._eval_events = []
         return events
+
+    def consume_fact_events(self) -> list[dict[str, Any]]:
+        events = self._fact_events
+        self._fact_events = []
+        return events
+
+
+def _load_policy_yaml(path: Path) -> dict[str, Any]:
+    try:
+        import yaml  # type: ignore
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except ImportError as exc:
+        raise RuntimeError("PyYAML is required for PolicyGraph YAML policy packs") from exc
+
+
+def _fact_namespace_counts(nodes: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for node in nodes:
+        namespace = str(node.get("namespace") or "unknown")
+        counts[namespace] = counts.get(namespace, 0) + 1
+    return counts
+
+
+def _fact_summary(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    important = {"action", "source", "asset", "contract", "package", "secret", "mcp", "memory", "sandbox"}
+    out = []
+    for node in nodes:
+        if node.get("namespace") in important:
+            out.append({k: node.get(k) for k in ("fact_id", "namespace", "key", "value", "evidence_refs")})
+        if len(out) >= 40:
+            break
+    return out

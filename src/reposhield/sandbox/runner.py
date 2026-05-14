@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 
 from ..models import ActionIR, ExecTrace, PackageEvent, PolicyDecision, new_id
-from .profiles import SandboxProfile, profile_for_action
+from .profiles import SANDBOX_PROFILES, SandboxProfile, profile_for_action
 
 SENSITIVE_NAMES = {".env", ".npmrc", ".pypirc"}
 SAFE_TEST_PREFIXES = ["pytest", "python -m pytest"]
@@ -28,14 +28,14 @@ class SandboxBackend:
     def __init__(self, repo_root: str | Path):
         self.repo_root = Path(repo_root).resolve()
 
-    def preflight(self, action: ActionIR, profile: SandboxProfile, decision: PolicyDecision | None = None, package_event: PackageEvent | None = None) -> ExecTrace:
+    def preflight(self, action: ActionIR, profile: SandboxProfile, decision: PolicyDecision | None = None, package_event: PackageEvent | None = None, evidence_mode: str = "summary") -> ExecTrace:
         raise NotImplementedError
 
 
 class DryRunBackend(SandboxBackend):
     name = "dry_run"
 
-    def preflight(self, action: ActionIR, profile: SandboxProfile, decision: PolicyDecision | None = None, package_event: PackageEvent | None = None) -> ExecTrace:
+    def preflight(self, action: ActionIR, profile: SandboxProfile, decision: PolicyDecision | None = None, package_event: PackageEvent | None = None, evidence_mode: str = "summary") -> ExecTrace:
         trace = ExecTrace(
             exec_trace_id=new_id("trace"),
             action_id=action.action_id,
@@ -43,6 +43,7 @@ class DryRunBackend(SandboxBackend):
             sandbox_profile=profile.name,
             process_tree=_process_tree(action.raw_action),
             recommended_decision=decision.decision if decision else "allow",
+            metadata={"requested_profile": profile.name, "actual_profile": profile.name, "evidence_mode": evidence_mode},
         )
 
         if action.semantic_action.startswith("install_"):
@@ -121,10 +122,10 @@ class SubprocessOverlayBackend(DryRunBackend):
     """Execute explicitly safe local tests in a sensitive-file-masked copy."""
     name = "subprocess_overlay"
 
-    def preflight(self, action: ActionIR, profile: SandboxProfile, decision: PolicyDecision | None = None, package_event: PackageEvent | None = None) -> ExecTrace:
+    def preflight(self, action: ActionIR, profile: SandboxProfile, decision: PolicyDecision | None = None, package_event: PackageEvent | None = None, evidence_mode: str = "summary") -> ExecTrace:
         if action.semantic_action != "run_tests":
-            return super().preflight(action, profile, decision, package_event)
-        trace = ExecTrace(new_id("trace"), action.action_id, action.raw_action, profile.name, process_tree=_process_tree(action.raw_action), recommended_decision=decision.decision if decision else "allow")
+            return super().preflight(action, profile, decision, package_event, evidence_mode=evidence_mode)
+        trace = ExecTrace(new_id("trace"), action.action_id, action.raw_action, profile.name, process_tree=_process_tree(action.raw_action), recommended_decision=decision.decision if decision else "allow", metadata={"requested_profile": profile.name, "actual_profile": profile.name, "evidence_mode": evidence_mode})
         raw = action.raw_action.strip()
         if not any(raw == prefix or raw.startswith(prefix + " ") for prefix in SAFE_TEST_PREFIXES):
             trace.risk_observed.append("test_command_simulated")
@@ -167,9 +168,9 @@ class SandboxRunner:
         self.repo_root = Path(repo_root).resolve()
         self.backend = self._make_backend(backend)
 
-    def preflight(self, action: ActionIR, decision: PolicyDecision | None = None, package_event: PackageEvent | None = None) -> ExecTrace:
-        profile = profile_for_action(action)
-        return self.backend.preflight(action, profile, decision=decision, package_event=package_event)
+    def preflight(self, action: ActionIR, decision: PolicyDecision | None = None, package_event: PackageEvent | None = None, profile: str | SandboxProfile | None = None, evidence_mode: str = "summary") -> ExecTrace:
+        selected = self._profile(profile, action)
+        return self.backend.preflight(action, selected, decision=decision, package_event=package_event, evidence_mode=evidence_mode)
 
     def _make_backend(self, backend: str) -> SandboxBackend:
         if backend == "dry_run":
@@ -177,6 +178,18 @@ class SandboxRunner:
         if backend == "bubblewrap":
             return BubblewrapBackend(self.repo_root)
         return SubprocessOverlayBackend(self.repo_root)
+
+    @staticmethod
+    def _profile(profile: str | SandboxProfile | None, action: ActionIR) -> SandboxProfile:
+        if isinstance(profile, SandboxProfile):
+            return profile
+        if isinstance(profile, str) and profile in SANDBOX_PROFILES:
+            return SANDBOX_PROFILES[profile]
+        if profile == "network-off":
+            return SANDBOX_PROFILES["package_preflight"] if action.semantic_action.startswith("install_") else profile_for_action(action)
+        if profile == "dry-run":
+            return profile_for_action(action)
+        return profile_for_action(action)
 
 
 def _process_tree(command: str) -> list[str]:

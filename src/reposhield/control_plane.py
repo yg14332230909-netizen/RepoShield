@@ -124,21 +124,20 @@ class RepoShieldControlPlane:
 
         # First decision: may already hard-block before sandbox. Preflight can enrich evidence for high-risk actions.
         decision = self.policy.decide(self.contract, action, self.asset_graph, self.provenance.graph, package_event=package_event, secret_event=secret_event)
-        preflight_actions = {
-            "install_git_dependency", "install_tarball_dependency", "install_registry_dependency",
-            "send_network_request", "read_secret_file", "publish_artifact", "modify_ci_pipeline",
-            "modify_registry_config", "git_push_force", "invoke_destructive_mcp_tool", "unknown_side_effect",
-        }
-        if run_preflight and decision.decision in {"sandbox_then_approval", "block"} and action.semantic_action in preflight_actions:
-            trace = self.sandbox.preflight(action, decision=decision, package_event=package_event)
+        preflight_plan = self.policy.plan_preflight(decision) if hasattr(self.policy, "plan_preflight") else None
+        if run_preflight and preflight_plan and preflight_plan.required:
+            trace = self.sandbox.preflight(action, decision=decision, package_event=package_event, profile=preflight_plan.profile, evidence_mode=preflight_plan.evidence_mode)
             self.audit.append("exec_trace", asdict(trace), task_id=self.contract.task_id, actor="sandbox", action_id=action.action_id)
             decision = self.policy.decide(self.contract, action, self.asset_graph, self.provenance.graph, package_event=package_event, secret_event=secret_event, exec_trace=trace)
 
+        policy_fact_events = self.policy.consume_fact_events() if hasattr(self.policy, "consume_fact_events") else []
         policy_eval_events = self.policy.consume_eval_events() if hasattr(self.policy, "consume_eval_events") else []
         decision = self.policy_overrides.apply(action, decision)
         for event in self.policy_overrides.consume_events():
             self.audit.append("policy_override_event", event, task_id=self.contract.task_id, actor="policy_config", action_id=action.action_id, decision_id=decision.decision_id)
 
+        for event in policy_fact_events:
+            self.audit.append("policy_fact_set", event, task_id=self.contract.task_id, actor="policy_engine", source_ids=action.source_ids, action_id=action.action_id, decision_id=decision.decision_id)
         for event in policy_eval_events:
             self.audit.append("policy_eval_trace", event, task_id=self.contract.task_id, actor="policy_engine", source_ids=action.source_ids, action_id=action.action_id, decision_id=decision.decision_id)
         self.audit.append("policy_decision", asdict(decision), task_id=self.contract.task_id, actor="policy_engine", source_ids=action.source_ids, action_id=action.action_id, decision_id=decision.decision_id)
