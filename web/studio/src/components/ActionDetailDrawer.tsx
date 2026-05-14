@@ -24,7 +24,7 @@ function ruleNames(decision: Record<string, unknown>): string[] {
   });
 }
 
-export function ActionDetailDrawer({ detail }: { detail: ActionDetail | null }) {
+export function ActionDetailDrawer({ detail, onOpenJudgment }: { detail: ActionDetail | null; onOpenJudgment?: () => void }) {
   if (!detail) return (
     <div className="action-empty-state">
       <h3>还没有选中具体动作</h3>
@@ -57,6 +57,7 @@ export function ActionDetailDrawer({ detail }: { detail: ActionDetail | null }) 
         <div><b>来源影响</b><span>{sourcesText(detail.sources)}</span></div>
         <div><b>命中规则</b><span>{rules.length ? rules.join("、") : "没有规则明细"}</span></div>
       </section>
+      <button className="primary judgment-open-button" onClick={onOpenJudgment}>打开综合判断过程</button>
       <PolicyTraceDebugger
         trace={trace}
         predicates={predicates}

@@ -10,15 +10,17 @@ import { RunCockpit } from "../routes/RunCockpit";
 import { SandboxEvidence } from "../routes/SandboxEvidence";
 import { TraceGraph } from "../routes/TraceGraph";
 import { PolicyDebugger } from "../routes/PolicyDebugger";
+import { PolicyJudgment } from "../routes/PolicyJudgment";
 import { useRunStore } from "../state/useRunStore";
 import { runSubtitle, runTitle, shortId } from "../components/displayText";
 
-type Tab = "cockpit" | "attack" | "graph" | "policy" | "approvals" | "sandbox" | "bench";
+type Tab = "cockpit" | "attack" | "graph" | "judgment" | "policy" | "approvals" | "sandbox" | "bench";
 
 const tabs: Array<[Tab, string]> = [
   ["cockpit", "本次运行"],
   ["attack", "攻击演示"],
   ["graph", "安全决策追踪图"],
+  ["judgment", "综合判断"],
   ["policy", "拦截原因"],
   ["approvals", "人工审批"],
   ["sandbox", "沙箱预检"],
@@ -125,13 +127,14 @@ export function App() {
             )}
             {tab === "attack" && <AttackLab scenarios={store.scenarios} runs={store.runs} onRunScenario={store.runScenario} onOpenRun={store.selectRun} />}
             {tab === "graph" && <TraceGraph nodes={store.graph.nodes} edges={store.graph.edges} activeActionId={store.selectedActionId} onInspectAction={store.inspectAction} />}
+            {tab === "judgment" && <PolicyJudgment judgment={store.actionJudgment} events={store.events} onInspectAction={store.inspectAction} />}
             {tab === "policy" && <PolicyDebugger events={store.events} />}
             {tab === "approvals" && <ApprovalCenter events={store.approvals} onGrant={store.grantApproval} onDeny={store.denyApproval} />}
             {tab === "sandbox" && <SandboxEvidence events={store.events} />}
             {tab === "bench" && <BenchReportView bench={store.bench} />}
           </div>
         </section>
-        <aside className="detail"><div className="panel-head"><h2>动作详情</h2></div><ActionDetailDrawer detail={store.actionDetail} /></aside>
+        <aside className="detail"><div className="panel-head"><h2>动作详情</h2></div><ActionDetailDrawer detail={store.actionDetail} onOpenJudgment={() => setTab("judgment")} /></aside>
       </main>
     </>
   );

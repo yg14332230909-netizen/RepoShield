@@ -156,6 +156,57 @@ def build_action_detail(events: list[StudioEvent], action_id: str) -> ActionDeta
     return detail
 
 
+def build_action_judgment(events: list[StudioEvent], action_id: str) -> dict[str, Any] | None:
+    detail = build_action_detail(events, action_id)
+    if detail is None:
+        return None
+    return judgment_view_model(detail)
+
+
+def judgment_view_model(detail: ActionDetail) -> dict[str, Any]:
+    trace = detail.policy_eval_trace or {}
+    decision = detail.decision or {}
+    action = detail.action or {}
+    fact_nodes = list(trace.get("fact_nodes") or detail.policy_fact_set.get("summary") or [])
+    predicate_rows = list(detail.policy_predicates or _predicate_matrix(trace))
+    rule_nodes = list(trace.get("rule_nodes") or decision.get("matched_rules") or [])
+    invariant_hits = [rule for rule in rule_nodes if rule.get("invariant") or str(rule.get("rule_id") or "").startswith("INV-")]
+    final_decision = str(trace.get("final_decision") or decision.get("decision") or detail.runtime.get("effective_decision") or "unknown")
+    return {
+        "schema_version": "studio.judgment.v1",
+        "action_id": detail.action_id,
+        "run_id": detail.run_id,
+        "action_summary": {
+            "raw_action": action.get("raw_action"),
+            "semantic_action": action.get("semantic_action"),
+            "risk": action.get("risk"),
+            "parser_confidence": action.get("parser_confidence"),
+        },
+        "evidence_groups": _judgment_evidence_groups(detail, fact_nodes),
+        "fact_set": detail.policy_fact_set,
+        "fact_nodes": fact_nodes,
+        "invariant_hits": invariant_hits,
+        "candidate_rules": _candidate_rules(trace, rule_nodes),
+        "predicate_rows": predicate_rows,
+        "lattice_path": list(detail.policy_lattice_path or trace.get("decision_lattice_path") or []),
+        "causal_graph": detail.policy_causal_graph or {
+            "fact_nodes": fact_nodes,
+            "predicate_nodes": list(trace.get("predicate_nodes") or []),
+            "rule_nodes": rule_nodes,
+            "lattice_nodes": list(trace.get("lattice_nodes") or []),
+            "edges": list(trace.get("edges") or []),
+        },
+        "final_decision": final_decision,
+        "reason_codes": list(decision.get("reason_codes") or []),
+        "required_controls": list(decision.get("required_controls") or []),
+        "evidence_refs": list(decision.get("evidence_refs") or []),
+        "why_text": _why_text(detail, final_decision, invariant_hits),
+        "skipped_rules_summary": trace.get("skipped_rules_summary") or {},
+        "policy_eval_trace_id": trace.get("policy_eval_trace_id"),
+        "fact_hash": trace.get("fact_hash") or detail.policy_fact_set.get("fact_hash"),
+    }
+
+
 def _predicate_matrix(trace: dict[str, Any]) -> list[dict[str, Any]]:
     rules = {str(rule.get("rule_id") or rule.get("id")): rule for rule in trace.get("rule_nodes") or [] if isinstance(rule, dict)}
     rows: list[dict[str, Any]] = []
@@ -180,6 +231,133 @@ def _predicate_matrix(trace: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def _candidate_rules(trace: dict[str, Any], rule_nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    candidate_count = int((trace.get("skipped_rules_summary") or {}).get("candidate_rules") or len(rule_nodes))
+    return [{"rule_id": rule.get("rule_id") or rule.get("id"), **rule} for rule in rule_nodes] or [{"rule_id": f"candidate_{idx + 1}"} for idx in range(candidate_count)]
+
+
+def _judgment_evidence_groups(detail: ActionDetail, fact_nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        _group("source", "来源证据", "warning", _source_items(detail.sources, fact_nodes)),
+        _group("action", "动作证据", "info", _fact_items(fact_nodes, "action", "ActionIR", fallback=detail.action)),
+        _group("asset", "资产证据", "warning", _fact_items(fact_nodes, "asset", "AssetGraph")),
+        _group("contract", "任务边界证据", "info", _fact_items(fact_nodes, "contract", "TaskContract", fallback=detail.instruction)),
+        _group("security", "安全事件证据", "critical", _security_items(detail.evidence_events, fact_nodes)),
+        _group("execution", "执行预检证据", "normal", _execution_items(detail.evidence_events)),
+    ]
+
+
+def _group(group_id: str, label: str, severity: str, items: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"group_id": group_id, "label": label, "severity": severity, "items": items}
+
+
+def _source_items(sources: list[dict[str, Any]], fact_nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    items = [
+        {
+            "id": str(source.get("source_id") or f"source_{idx}"),
+            "label": str(source.get("source_type") or "上下文来源"),
+            "value": source.get("trust_level") or source.get("trust") or "unknown",
+            "evidence_refs": [str(source.get("source_id"))] if source.get("source_id") else [],
+            "source_module": "ContextGraph",
+        }
+        for idx, source in enumerate(sources)
+    ]
+    items.extend(_fact_items(fact_nodes, "source", "ContextGraph"))
+    return items
+
+
+def _security_items(events: list[dict[str, Any]], fact_nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    items = []
+    for event in events:
+        event_type = event.get("type")
+        if event_type not in {"secret_event", "package_event", "mcp_invocation", "memory_event"}:
+            continue
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        items.append(
+            {
+                "id": str(event.get("span_id") or event.get("event_id") or event_type),
+                "label": str(event_type).replace("_", " "),
+                "value": payload.get("event") or payload.get("source") or payload.get("decision") or payload.get("summary") or event_type,
+                "evidence_refs": list(payload.get("evidence_refs") or []),
+                "source_module": _source_module_for_event(str(event_type)),
+            }
+        )
+    for namespace, module in (("secret", "SecretSentry"), ("package", "PackageGuard"), ("mcp", "MCPProxy"), ("memory", "MemoryStore")):
+        items.extend(_fact_items(fact_nodes, namespace, module))
+    return items
+
+
+def _execution_items(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    items = []
+    for event in events:
+        if event.get("type") != "exec_trace":
+            continue
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        items.append(
+            {
+                "id": str(payload.get("exec_trace_id") or event.get("span_id") or event.get("event_id")),
+                "label": "沙箱预检",
+                "value": {"risk_observed": payload.get("risk_observed"), "evidence_mode": payload.get("evidence_mode"), "profile": payload.get("profile")},
+                "evidence_refs": [str(payload.get("exec_trace_id"))] if payload.get("exec_trace_id") else [],
+                "source_module": "SandboxRunner",
+            }
+        )
+    return items
+
+
+def _fact_items(fact_nodes: list[dict[str, Any]], namespace: str, source_module: str, fallback: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    items = [
+        {
+            "id": str(fact.get("fact_id") or fact.get("id") or f"{namespace}.{fact.get('key')}"),
+            "label": f"{namespace}.{fact.get('key')}",
+            "value": fact.get("value"),
+            "evidence_refs": list(fact.get("evidence_refs") or []),
+            "source_module": source_module,
+        }
+        for fact in fact_nodes
+        if fact.get("namespace") == namespace
+    ]
+    if items or not fallback:
+        return items
+    return [
+        {
+            "id": f"{namespace}.{key}",
+            "label": f"{namespace}.{key}",
+            "value": value,
+            "evidence_refs": [],
+            "source_module": source_module,
+        }
+        for key, value in fallback.items()
+        if value not in (None, "", [], {})
+    ][:8]
+
+
+def _source_module_for_event(event_type: str) -> str:
+    return {
+        "secret_event": "SecretSentry",
+        "package_event": "PackageGuard",
+        "mcp_invocation": "MCPProxy",
+        "memory_event": "MemoryStore",
+    }.get(event_type, "PolicyGraph")
+
+
+def _why_text(detail: ActionDetail, final_decision: str, invariant_hits: list[dict[str, Any]]) -> str:
+    reasons = [str(code) for code in detail.decision.get("reason_codes", [])]
+    action = str(detail.action.get("semantic_action") or detail.action_id)
+    source_untrusted = any(str(source.get("trust_level") or source.get("trust")) == "untrusted" for source in detail.sources) or "influenced_by_untrusted_source" in reasons
+    invariant_ids = [str(rule.get("rule_id") or rule.get("id")) for rule in invariant_hits]
+    if final_decision == "block" and invariant_ids:
+        prefix = "低可信来源诱导" if source_untrusted else "该动作"
+        return f"{prefix}{action}，并触发不可降级安全不变量 {', '.join(invariant_ids)}，因此执行前阻断。"
+    if final_decision == "block":
+        return f"{action} 命中高风险策略条件，RepoShield 将多个证据合并后选择阻断。"
+    if "sandbox" in final_decision:
+        return f"{action} 仍有不确定风险，因此只能在沙箱或审批约束下继续。"
+    if final_decision == "allow":
+        return f"{action} 与任务边界和当前证据一致，未触发高危不变量。"
+    return "该动作缺少完整判断轨迹，前端仅展示已有策略结论。"
 
 
 def graph_for_run(events: list[StudioEvent], run_id: str) -> dict[str, Any]:

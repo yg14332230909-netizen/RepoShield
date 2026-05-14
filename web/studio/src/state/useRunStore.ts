@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { studioApi } from "../api/client";
 import { subscribeToAllEvents } from "../api/events";
-import type { ActionDetail, ApprovalEvent, BenchReport, GraphEdge, GraphNode, RunSummary, ScenarioSpec, StudioEvent } from "../types";
+import type { ActionDetail, ApprovalEvent, BenchReport, GraphEdge, GraphNode, JudgmentTraceViewModel, RunSummary, ScenarioSpec, StudioEvent } from "../types";
 
 export function useRunStore() {
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -9,6 +9,7 @@ export function useRunStore() {
   const [events, setEvents] = useState<StudioEvent[]>([]);
   const [graph, setGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
   const [actionDetail, setActionDetail] = useState<ActionDetail | null>(null);
+  const [actionJudgment, setActionJudgment] = useState<JudgmentTraceViewModel | null>(null);
   const [selectedActionId, setSelectedActionId] = useState<string>("");
   const [scenarios, setScenarios] = useState<ScenarioSpec[]>([]);
   const [approvals, setApprovals] = useState<ApprovalEvent[]>([]);
@@ -69,7 +70,9 @@ export function useRunStore() {
 
   const inspectAction = useCallback(async (actionId: string) => {
     setSelectedActionId(actionId);
-    setActionDetail(await studioApi.action(actionId));
+    const [detail, judgment] = await Promise.all([studioApi.action(actionId), studioApi.judgment(actionId)]);
+    setActionDetail(detail);
+    setActionJudgment(judgment);
   }, []);
 
   const runScenario = useCallback(async (scenarioId: string) => {
@@ -106,6 +109,7 @@ export function useRunStore() {
     setEvents([]);
     setGraph({ nodes: [], edges: [] });
     setActionDetail(null);
+    setActionJudgment(null);
     setSelectedActionId("");
     const approvalResult = await studioApi.approvals();
     setApprovals(approvalResult.events);
@@ -183,6 +187,7 @@ export function useRunStore() {
     events,
     graph,
     actionDetail,
+    actionJudgment,
     selectedActionId,
     scenarios,
     approvals,

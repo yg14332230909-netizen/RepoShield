@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 from .models import ActionDetail, StudioEvent
-from .normalizer import build_action_detail, build_run_summaries, graph_for_run, normalize_audit_events, read_jsonl
+from .normalizer import build_action_detail, build_action_judgment, build_run_summaries, graph_for_run, normalize_audit_events, read_jsonl
 
 
 class StudioEventIndex:
@@ -49,6 +49,11 @@ class StudioEventIndex:
         with self._lock:
             detail: ActionDetail | None = build_action_detail(self._events, action_id)
             return detail.to_dict() if detail else None
+
+    def action_judgment(self, action_id: str) -> dict | None:
+        self.refresh()
+        with self._lock:
+            return build_action_judgment(self._events, action_id)
 
     def graph(self, run_id: str) -> dict:
         self.refresh()

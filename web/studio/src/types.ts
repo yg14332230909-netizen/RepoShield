@@ -84,6 +84,56 @@ export interface PolicyEvalTrace extends PolicyCausalGraph {
   skipped_rules_summary?: Record<string, unknown>;
 }
 
+export type JudgmentSourceModule =
+  | "ActionIR"
+  | "ContextGraph"
+  | "AssetGraph"
+  | "SecretSentry"
+  | "PackageGuard"
+  | "MCPProxy"
+  | "MemoryStore"
+  | "SandboxRunner"
+  | "TaskContract"
+  | "PolicyGraph";
+
+export interface JudgmentEvidenceItem {
+  id: string;
+  label: string;
+  value: unknown;
+  evidence_refs: string[];
+  source_module: JudgmentSourceModule;
+}
+
+export interface JudgmentEvidenceGroup {
+  group_id: string;
+  label: string;
+  severity: Severity;
+  items: JudgmentEvidenceItem[];
+}
+
+export interface JudgmentTraceViewModel {
+  schema_version: string;
+  action_id: string;
+  run_id: string;
+  action_summary: Record<string, unknown>;
+  evidence_groups: JudgmentEvidenceGroup[];
+  fact_set: Record<string, unknown>;
+  fact_nodes: Array<Record<string, unknown>>;
+  invariant_hits: Array<Record<string, unknown>>;
+  candidate_rules: Array<Record<string, unknown>>;
+  predicate_rows: PolicyPredicateRow[];
+  lattice_path: Array<Record<string, unknown>>;
+  causal_graph: PolicyCausalGraph;
+  final_decision: string;
+  reason_codes: string[];
+  required_controls: string[];
+  evidence_refs: string[];
+  why_text: string;
+  skipped_rules_summary?: Record<string, unknown>;
+  policy_eval_trace_id?: string;
+  fact_hash?: string;
+}
+
 export interface ScenarioSpec {
   id: string;
   name: string;

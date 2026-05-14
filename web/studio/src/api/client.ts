@@ -1,4 +1,4 @@
-import type { ActionDetail, ApprovalEvent, BenchReport, GraphEdge, GraphNode, RunSummary, ScenarioSpec, StudioEvent } from "../types";
+import type { ActionDetail, ApprovalEvent, BenchReport, GraphEdge, GraphNode, JudgmentTraceViewModel, RunSummary, ScenarioSpec, StudioEvent } from "../types";
 
 const token = localStorage.getItem("reposhieldToken") || "reposhield-local";
 
@@ -23,6 +23,7 @@ export const studioApi = {
   events: (runId: string, limit = 800) => request<{ events: StudioEvent[] }>(`/api/runs/${encodeURIComponent(runId)}/events?limit=${limit}`),
   graph: (runId: string) => request<{ nodes: GraphNode[]; edges: GraphEdge[] }>(`/api/runs/${encodeURIComponent(runId)}/graph`),
   action: (actionId: string) => request<ActionDetail>(`/api/actions/${encodeURIComponent(actionId)}`),
+  judgment: (actionId: string) => request<JudgmentTraceViewModel>(`/api/actions/${encodeURIComponent(actionId)}/judgment`),
   scenarios: () => request<{ scenarios: ScenarioSpec[] }>("/api/scenarios"),
   runScenario: (scenarioId: string) => request<{ result: { trace_id: string } }>(`/api/scenarios/${encodeURIComponent(scenarioId)}/run`, { method: "POST", body: "{}" }),
   approvals: () => request<{ metrics: Record<string, number>; events: ApprovalEvent[] }>("/api/approvals"),

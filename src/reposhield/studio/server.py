@@ -76,6 +76,11 @@ def serve_studio_pro(
             if path == "/api/events/stream":
                 self._stream(query.get("run_id", [None])[0])
                 return
+            if path.startswith("/api/actions/") and path.endswith("/judgment"):
+                action_id = unquote(path.split("/")[-2])
+                judgment = index.action_judgment(action_id)
+                self._json(judgment or {"error": "action not found"}, status=200 if judgment else 404)
+                return
             if path.startswith("/api/actions/"):
                 action_id = unquote(path.split("/")[-1])
                 detail = index.action_detail(action_id)
