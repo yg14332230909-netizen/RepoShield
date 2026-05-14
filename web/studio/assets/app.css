@@ -1055,6 +1055,13 @@ h3 {
   gap: 8px;
 }
 
+.panel-note {
+  margin: 0;
+  color: #475467;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 .pruner-step {
   display: grid;
   gap: 3px;
@@ -1072,6 +1079,35 @@ h3 {
 
 .pruner-step b {
   font-size: 24px;
+}
+
+.retrieval-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.retrieval-detail-grid section {
+  display: grid;
+  gap: 5px;
+  align-content: start;
+  max-height: 180px;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.retrieval-detail-grid b {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.retrieval-detail-grid span {
+  overflow-wrap: anywhere;
+  color: #475467;
+  font-size: 13px;
 }
 
 .predicate-rule-card {

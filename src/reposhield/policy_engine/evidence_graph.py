@@ -25,8 +25,10 @@ class PolicyEvaluationTrace:
     predicate_nodes: list[dict[str, Any]] = field(default_factory=list)
     rule_nodes: list[dict[str, Any]] = field(default_factory=list)
     lattice_nodes: list[dict[str, Any]] = field(default_factory=list)
+    retrieval_nodes: list[dict[str, Any]] = field(default_factory=list)
     edges: list[dict[str, str]] = field(default_factory=list)
     skipped_rules_summary: dict[str, Any] = field(default_factory=dict)
+    retrieval_trace: dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=utc_now)
 
     @classmethod
@@ -42,7 +44,8 @@ class PolicyEvaluationTrace:
         lattice_path: list[dict[str, Any]],
         skipped_rules_summary: dict[str, Any] | None = None,
     ) -> "PolicyEvaluationTrace":
-        graph = _causal_graph(fact_set, hits, lattice_path)
+        retrieval_trace = (skipped_rules_summary or {}).get("retrieval_trace", {}) if isinstance(skipped_rules_summary, dict) else {}
+        graph = _causal_graph(fact_set, hits, lattice_path, retrieval_trace)
         return cls(
             policy_eval_trace_id=new_id("peval"),
             action_id=action_id,
@@ -57,16 +60,18 @@ class PolicyEvaluationTrace:
             predicate_nodes=graph["predicate_nodes"],
             rule_nodes=graph["rule_nodes"],
             lattice_nodes=graph["lattice_nodes"],
+            retrieval_nodes=graph["retrieval_nodes"],
             edges=graph["edges"],
             decision_lattice_path=lattice_path,
             skipped_rules_summary=skipped_rules_summary or {},
+            retrieval_trace=retrieval_trace,
         )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
-def _causal_graph(fact_set: PolicyFactSet, hits: list[RuleHit], lattice_path: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+def _causal_graph(fact_set: PolicyFactSet, hits: list[RuleHit], lattice_path: list[dict[str, Any]], retrieval_trace: dict[str, Any] | None = None) -> dict[str, list[dict[str, Any]]]:
     fact_nodes = [
         {
             "id": fact.fact_id,
@@ -81,7 +86,18 @@ def _causal_graph(fact_set: PolicyFactSet, hits: list[RuleHit], lattice_path: li
     predicate_nodes: list[dict[str, Any]] = []
     rule_nodes: list[dict[str, Any]] = []
     lattice_nodes: list[dict[str, Any]] = []
+    retrieval_nodes: list[dict[str, Any]] = []
     edges: list[dict[str, str]] = []
+    for idx, posting in enumerate((retrieval_trace or {}).get("postings", []) or []):
+        node_id = f"retrieval_{idx}"
+        retrieval_nodes.append({"id": node_id, "kind": "posting", **posting})
+        key = str(posting.get("key") or "")
+        path, _, value = key.partition("=")
+        for fact in fact_set.facts:
+            if f"{fact.namespace}.{fact.key}" == path and str(fact.value).lower() == value:
+                edges.append({"from": fact.fact_id, "to": node_id, "relation": "retrieves"})
+        for rule_id in posting.get("rule_ids", []) or []:
+            edges.append({"from": node_id, "to": str(rule_id), "relation": "candidate"})
     for hit in hits:
         predicate_ids: list[str] = []
         for pred in hit.predicates:
@@ -112,5 +128,6 @@ def _causal_graph(fact_set: PolicyFactSet, hits: list[RuleHit], lattice_path: li
         "predicate_nodes": predicate_nodes,
         "rule_nodes": rule_nodes,
         "lattice_nodes": lattice_nodes,
+        "retrieval_nodes": retrieval_nodes,
         "edges": edges,
     }

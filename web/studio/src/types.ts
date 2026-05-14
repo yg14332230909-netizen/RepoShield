@@ -69,6 +69,7 @@ export interface PolicyCausalGraph {
   predicate_nodes?: Array<Record<string, unknown>>;
   rule_nodes?: Array<Record<string, unknown>>;
   lattice_nodes?: Array<Record<string, unknown>>;
+  retrieval_nodes?: Array<Record<string, unknown>>;
   edges?: Array<Record<string, unknown>>;
 }
 
@@ -130,6 +131,7 @@ export interface JudgmentTraceViewModel {
   evidence_refs: string[];
   why_text: string;
   skipped_rules_summary?: Record<string, unknown>;
+  retrieval_trace?: Record<string, unknown>;
   policy_eval_trace_id?: string;
   fact_hash?: string;
 }

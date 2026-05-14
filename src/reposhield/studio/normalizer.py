@@ -194,6 +194,7 @@ def judgment_view_model(detail: ActionDetail) -> dict[str, Any]:
             "predicate_nodes": list(trace.get("predicate_nodes") or []),
             "rule_nodes": rule_nodes,
             "lattice_nodes": list(trace.get("lattice_nodes") or []),
+            "retrieval_nodes": list(trace.get("retrieval_nodes") or []),
             "edges": list(trace.get("edges") or []),
         },
         "final_decision": final_decision,
@@ -202,6 +203,7 @@ def judgment_view_model(detail: ActionDetail) -> dict[str, Any]:
         "evidence_refs": list(decision.get("evidence_refs") or []),
         "why_text": _why_text(detail, final_decision, invariant_hits),
         "skipped_rules_summary": trace.get("skipped_rules_summary") or {},
+        "retrieval_trace": trace.get("retrieval_trace") or (trace.get("skipped_rules_summary") or {}).get("retrieval_trace") or {},
         "policy_eval_trace_id": trace.get("policy_eval_trace_id"),
         "fact_hash": trace.get("fact_hash") or detail.policy_fact_set.get("fact_hash"),
     }

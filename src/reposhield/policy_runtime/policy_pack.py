@@ -148,6 +148,12 @@ def _validate_policygraph_pack(data: dict[str, Any]) -> list[str]:
             op = str(pred.get("operator") or "eq")
             if op not in VALID_OPERATORS:
                 errors.append(f"{prefix}.predicates[{pidx}].operator must be one of {sorted(VALID_OPERATORS)}")
+        for hidx, hint in enumerate(rule.get("index_hints", []) or []):
+            if not isinstance(hint, dict):
+                errors.append(f"{prefix}.index_hints[{hidx}] must be an object")
+                continue
+            if not hint.get("path"):
+                errors.append(f"{prefix}.index_hints[{hidx}].path is required")
         unless = rule.get("unless", [])
         unless_items = unless if isinstance(unless, list) else [unless] if unless else []
         for uidx, item in enumerate(unless_items):

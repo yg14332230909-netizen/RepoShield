@@ -46,6 +46,26 @@ class RuleHit:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class IndexHint:
+    path: str
+    operator: str
+    expected_values: list[str]
+    group: str = "must"
+    strategy: str = "exact"
+
+
+@dataclass(slots=True)
+class RuleSignature:
+    rule_id: str
+    must_keys: set[str] = field(default_factory=set)
+    should_keys: set[str] = field(default_factory=set)
+    any_groups: list[set[str]] = field(default_factory=list)
+    residual_predicates: list[dict[str, Any]] = field(default_factory=list)
+    has_unless: bool = False
+    safety_category: str = "domain"
+
+
 @dataclass(slots=True)
 class CompiledPolicyRule:
     rule_id: str
@@ -58,3 +78,5 @@ class CompiledPolicyRule:
     predicates: list[dict[str, Any]] = field(default_factory=list)
     unless: list[dict[str, Any]] = field(default_factory=list)
     required_controls: list[str] = field(default_factory=list)
+    index_hints: list[IndexHint] = field(default_factory=list)
+    signature: RuleSignature | None = None
