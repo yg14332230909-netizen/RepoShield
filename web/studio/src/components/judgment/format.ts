@@ -1,6 +1,62 @@
+import type { JudgmentTraceViewModel, PolicyPredicateRow, Severity } from "../../types";
 import { displayLabel } from "../DecisionBadge";
 import { actionLabel, reasonLabels, shortId } from "../displayText";
-import type { JudgmentTraceViewModel, PolicyPredicateRow, Severity } from "../../types";
+
+export const factLabels: Record<string, string> = {
+  "source.trust_floor": "来源可信等级",
+  "source.has_untrusted": "是否受不可信来源影响",
+  "action.semantic_action": "动作类型",
+  "action.risk": "动作风险",
+  "action.tool": "调用工具",
+  "action.side_effect": "是否有副作用",
+  "action.parser_confidence": "动作解析置信度",
+  "action.high_risk": "是否高危动作",
+  "action.network_capability": "是否可能联网",
+  "action.risk_tag": "风险标签",
+  "asset.touched_path": "触碰文件路径",
+  "asset.touched_type": "触碰资产类型",
+  "asset.touched_risk": "资产风险等级",
+  "asset.repo_escape": "是否越过仓库边界",
+  "asset.symlink_escape": "是否符号链接逃逸",
+  "contract.match": "是否符合任务边界",
+  "contract.violation_reason": "越界原因",
+  "contract.forbidden_file_touch": "是否触碰禁止文件",
+  "secret.event": "密钥安全事件",
+  "package.source": "依赖来源",
+  "package.lifecycle_scripts": "是否存在生命周期脚本",
+  "sandbox.risk_observed": "沙箱观察到的风险",
+  "sandbox.observation": "沙箱观察结果",
+  "mcp.capability": "MCP 能力",
+  "memory.authorization": "记忆授权状态",
+};
+
+const valueLabels: Record<string, string> = {
+  true: "是",
+  false: "否",
+  trusted: "可信",
+  untrusted: "不可信",
+  low: "低风险",
+  medium: "中风险",
+  high: "高风险",
+  critical: "严重风险",
+  match: "符合任务",
+  partial_match: "部分符合任务",
+  violation: "越过任务边界",
+  unknown: "无法确认",
+  git_url: "Git 地址依赖",
+  tarball_url: "压缩包依赖",
+  registry: "包仓库依赖",
+  secret_file: "密钥文件",
+  ci_workflow: "CI 工作流",
+  source_file: "源码文件",
+  read_secret_file: "读取密钥文件",
+  send_network_request: "发送网络请求",
+  run_tests: "运行测试",
+  edit_source_file: "编辑源码文件",
+  install_git_dependency: "安装 Git 依赖",
+  install_tarball_dependency: "安装压缩包依赖",
+  install_registry_dependency: "安装仓库依赖",
+};
 
 export function severityForDecision(decision: string): Severity {
   if (decision === "block" || decision === "quarantine") return "critical";
@@ -11,9 +67,23 @@ export function severityForDecision(decision: string): Severity {
 
 export function valueText(value: unknown): string {
   if (value === undefined || value === null || value === "") return "无";
+  if (value === "<REDACTED>") return "已脱敏";
   if (Array.isArray(value)) return value.map(valueText).join("、");
+  if (typeof value === "boolean") return value ? "是" : "否";
   if (typeof value === "object") return JSON.stringify(value);
-  return displayLabel(String(value));
+  const raw = String(value);
+  return valueLabels[raw] || displayLabel(raw);
+}
+
+export function factName(namespace: unknown, key: unknown): string {
+  const path = `${String(namespace || "policy")}.${String(key || "fact")}`;
+  return factLabels[path] || displayLabel(path);
+}
+
+export function factTokenText(token: string): string {
+  const [path, rawValue] = token.split("=");
+  const label = factLabels[path] || path;
+  return rawValue ? `${label} = ${valueText(rawValue)}` : label;
 }
 
 export function ruleTitle(rule: Record<string, unknown>): string {
@@ -24,26 +94,13 @@ export function ruleTitle(rule: Record<string, unknown>): string {
   if (id.includes("SC") || id.includes("PACKAGE") || id.includes("REGISTRY")) return `${id} · 供应链风险`;
   if (id.includes("SOURCE")) return `${id} · 低可信来源`;
   if (id.includes("REPO")) return `${id} · 仓库边界`;
+  if (id.includes("SANDBOX")) return `${id} · 沙箱预检`;
   return id || "策略规则";
 }
 
 export function predicatePath(row: PolicyPredicateRow): string {
   const raw = String(row.path || "证据事实");
-  const map: Record<string, string> = {
-    "action.semantic_action": "动作类型",
-    "action.risk": "动作风险",
-    "source.trust_floor": "来源可信度",
-    "source.has_untrusted": "是否含低可信来源",
-    "asset.touched_type": "触碰资产类型",
-    "asset.touched_path": "触碰文件路径",
-    "contract.match": "任务边界匹配",
-    "contract.forbidden_file_touch": "是否触碰禁止文件",
-    "secret.event": "密钥风险事件",
-    "package.source": "依赖来源",
-    "mcp.capability": "MCP 能力",
-    "sandbox.observation": "沙箱观察"
-  };
-  return map[raw] || displayLabel(raw);
+  return factLabels[raw] || displayLabel(raw);
 }
 
 export function oneLineAction(judgment: JudgmentTraceViewModel): string {
@@ -58,4 +115,12 @@ export function evidenceRefText(refs: unknown): string {
 export function reasonText(judgment: JudgmentTraceViewModel): string {
   const labels = reasonLabels(judgment.reason_codes);
   return labels.length ? labels.join("、") : judgment.why_text || "当前判断没有额外原因码。";
+}
+
+export function asRecordArray(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
+}
+
+export function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => String(item)) : [];
 }

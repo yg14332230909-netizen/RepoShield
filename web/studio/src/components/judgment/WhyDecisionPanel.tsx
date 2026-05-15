@@ -6,11 +6,11 @@ export function WhyDecisionPanel({ judgment }: { judgment: JudgmentTraceViewMode
   return (
     <section className="judgment-panel why-panel">
       <div className="judgment-panel-head">
-        <span className="policy-eyebrow">Decision / Why</span>
-        <h3>为什么这样判</h3>
+        <span className="policy-eyebrow">PolicyDecision / Why</span>
+        <h3>最终 why_text 是什么</h3>
       </div>
       <DecisionBadge label={judgment.final_decision} severity={severityForDecision(judgment.final_decision)} />
-      <p>{judgment.why_text}</p>
+      <p>{judgment.why_text || "当前动作没有额外自然语言解释。"}</p>
       <div className="why-grid">
         <div><b>原因码</b><span>{reasonText(judgment)}</span></div>
         <div><b>强制控制</b><span>{judgment.required_controls.length ? judgment.required_controls.join("、") : "无"}</span></div>

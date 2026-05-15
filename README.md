@@ -8,6 +8,72 @@ Short version:
 RepoShield = a pre-execution safety gate for coding agents
 ```
 
+## Core Algorithm: Repository-aware Multi-Evidence Policy Fusion
+
+RepoShield's core decision procedure is **R-MPF: Repository-aware
+Multi-Evidence Policy Fusion**. The goal is to make a coding-agent decision
+from repository context, user intent, tool semantics, source trust, asset risk,
+package risk, sandbox observations, and approval state, rather than from a
+single rule or a raw tool name.
+
+**Input**
+
+```text
+ActionIR + evidence objects
+```
+
+Evidence objects can include `TaskContract`, `ContextGraph`, source provenance,
+`RepoAssetGraph`, `SecretTaintEvent`, `PackageEvent`, MCP/memory signals,
+approval records, and sandbox `ExecTrace`.
+
+**Procedure**
+
+```text
+1. Fact Extraction
+   Normalize ActionIR and evidence objects into PolicyFactSet.
+
+2. Invariants
+   Evaluate non-downgradable safety gates such as secret access, egress after
+   secret, untrusted-source authorization, repository escape, CI/CD boundary,
+   and supply-chain hard stops.
+
+3. EvidenceIndex / RuleIndex
+   Normalize facts through FactKeyRegistry and FactNormalizer, then retrieve
+   candidate PolicyGraph rules through exact, presence, range, list, composite,
+   residual, and conservative safe-prune paths.
+
+4. PredicateEval
+   Evaluate candidate rule predicates against the full PolicyFactSet.
+
+5. DecisionLattice
+   Merge baseline, invariant hits, and domain-rule hits into the strongest
+   applicable decision: allow, allow_in_sandbox, sandbox_then_approval,
+   quarantine, or block.
+
+6. EvidenceGraph
+   Emit a causal graph linking facts, retrieval nodes, predicates, rules,
+   lattice transitions, final decision, and evidence references.
+```
+
+**Output**
+
+```text
+PolicyDecision + CausalEvidenceGraph
+```
+
+The returned decision carries `policy_version`, `matched_rules`,
+`reason_codes`, `required_controls`, `evidence_refs`, `rule_trace`, fact hash,
+and the retrieval / predicate / lattice trace consumed by Studio.
+
+**Properties**
+
+- **Invariant non-downgrade**: once a non-downgradable invariant fires, later
+  domain rules cannot reduce the result to a weaker host-allow decision.
+- **Indexed retrieval soundness**: RuleIndex may over-recall rules, but tests
+  require indexed candidate evaluation to match full-scan rule evaluation.
+- **Decision monotonicity**: DecisionLattice only moves toward an equally strict
+  or stricter decision when stronger evidence or higher-risk rule hits appear.
+
 ## Current Status
 
 RepoShield is currently a **strengthened research prototype / early engineering MVP**.

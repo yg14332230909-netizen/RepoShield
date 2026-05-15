@@ -7,7 +7,7 @@ export function EvidenceIntakePanel({ judgment, activeFactRefs = [] }: { judgmen
     <section className="judgment-panel evidence-intake">
       <div className="judgment-panel-head">
         <span className="policy-eyebrow">Evidence Intake</span>
-        <h3>进入判断引擎的多源证据</h3>
+        <h3>进入 R-MPF 判断引擎的多源证据</h3>
       </div>
       <div className="evidence-group-grid">
         {judgment.evidence_groups.map((group) => (
@@ -18,7 +18,7 @@ export function EvidenceIntakePanel({ judgment, activeFactRefs = [] }: { judgmen
               <div className={`evidence-item ${item.evidence_refs.some((ref) => refs.has(ref)) ? "highlight" : ""}`} key={item.id}>
                 <span>{item.label}</span>
                 <code>{valueText(item.value)}</code>
-                <small>refs: {evidenceRefText(item.evidence_refs)}</small>
+                <small>证据：{evidenceRefText(item.evidence_refs)}</small>
               </div>
             )) : <p className="muted">当前动作没有这一类证据。</p>}
           </article>

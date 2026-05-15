@@ -7,8 +7,8 @@ export function PredicateMatrix({ judgment }: { judgment: JudgmentTraceViewModel
   return (
     <section className="judgment-panel predicate-matrix-panel">
       <div className="judgment-panel-head">
-        <span className="policy-eyebrow">Predicate Evaluation</span>
-        <h3>规则条件矩阵</h3>
+        <span className="policy-eyebrow">PredicateEval</span>
+        <h3>哪些 predicate 成立</h3>
       </div>
       {grouped.map((group) => (
         <article className="predicate-rule-card" key={group.ruleId}>
@@ -21,9 +21,9 @@ export function PredicateMatrix({ judgment }: { judgment: JudgmentTraceViewModel
             {group.rows.map((row) => (
               <div className="predicate-row" key={`${group.ruleId}-${row.predicate_id}-${row.path}`}>
                 <span>{predicatePath(row)}</span>
-                <span>{row.expected === undefined ? String(row.operator || "事实命中") : valueText(row.expected)}</span>
-                <span>{valueText(row.actual)}<small>{evidenceRefText(row.evidence_refs)}</small></span>
-                <span className={row.matched ? "predicate-ok" : "predicate-miss"}>{row.matched ? "命中" : "未命中"}</span>
+                <span>{row.expected === undefined ? String(row.operator || "事实存在") : valueText(row.expected)}</span>
+                <span>{valueText(row.actual)}<small>证据：{evidenceRefText(row.evidence_refs)}</small></span>
+                <span className={row.matched ? "predicate-ok" : "predicate-miss"}>{row.matched ? "成立" : "未成立"}</span>
               </div>
             ))}
           </div>

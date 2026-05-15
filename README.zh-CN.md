@@ -46,6 +46,27 @@ Evidence -> Facts -> RuleIndex -> PolicyGraph -> Decision
 
 详见：[PolicyGraph / RuleIndex 多源证据引擎](docs/POLICYGRAPH_RULEINDEX.zh-CN.md)。
 
+## 核心算法：R-MPF
+
+R-MPF 全称为 **Repository-aware Multi-Evidence Policy Fusion**，即“仓库感知的多源证据策略融合算法”。
+
+```text
+输入：ActionIR + evidence objects
+步骤：Fact Extraction
+   -> Invariants
+   -> EvidenceIndex / RuleIndex
+   -> PredicateEval
+   -> DecisionLattice
+   -> EvidenceGraph
+输出：PolicyDecision + CausalEvidenceGraph
+```
+
+它具备三个关键性质：
+
+- **Invariant non-downgrade**：不可降级安全门命中后，普通策略不能把结果降级为直接放行。
+- **Indexed retrieval soundness**：RuleIndex 可以多召回，但不能漏召回；测试验证索引候选与全量扫描命中等价。
+- **Decision monotonicity**：更强证据或更高风险规则只会让决策格保持或升级到更严格决策。
+
 ## 已完成能力
 
 - OpenAI-compatible Gateway，支持 `/v1/chat/completions` 和最小 `/v1/responses` shape

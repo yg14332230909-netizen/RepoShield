@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { JudgmentTraceViewModel } from "../../types";
+import { AlgorithmTracePanel } from "./AlgorithmTracePanel";
 import { CausalEvidenceGraph } from "./CausalEvidenceGraph";
 import { CounterfactualPanel } from "./CounterfactualPanel";
 import { DecisionLatticeStepper } from "./DecisionLatticeStepper";
@@ -17,6 +18,7 @@ export function JudgmentWorkspace({ judgment }: { judgment: JudgmentTraceViewMod
   return (
     <div className="judgment-workspace">
       <JudgmentSummaryBar judgment={judgment} />
+      <AlgorithmTracePanel judgment={judgment} />
       <div className="judgment-layout">
         <div className="judgment-column left">
           <EvidenceIntakePanel judgment={judgment} activeFactRefs={activeRefs} />
