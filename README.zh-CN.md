@@ -1,6 +1,6 @@
 # RepoShield / PepoShield v0.3
 
-RepoShield 是一个面向 coding agent 的执行前安全治理网关。它拦在模型 API、tool call、shell/file/MCP 工具执行路径之前，把模型提出的动作转换成结构化 `ActionIR`，再结合任务合同、上下文来源、敏感信息、供应链、沙箱预检和策略规则决定是否允许执行。
+RepoShield 是面向 coding agent 的执行前安全治理网关。它拦在模型 API、tool call、shell、文件操作、MCP 工具和包管理器动作之前，把代理即将执行的行为转成结构化 `ActionIR`，再结合任务边界、来源可信度、资产类型、密钥事件、供应链信号、沙箱预检和策略图谱，决定动作是放行、仅沙箱执行、需要审批，还是直接阻断。
 
 一句话：
 
@@ -10,76 +10,63 @@ RepoShield = coding agent 的 pre-execution safety gate
 
 ## 当前成熟度
 
-这个仓库目前处在 **研究原型加强版 / 工程化 MVP 前期**。
-
-它已经不只是演示脚本，主链路、Gateway、审计、策略、approval、sandbox preflight、bench 和 dashboard 都有可运行实现和测试覆盖。但它还不是可直接面向企业客户部署的生产级安全产品。
-
-大致成熟度：
+RepoShield 目前是 **强化后的研究原型 / 早期工程 MVP**。它适合论文演示、课程项目、内部实验、网关拦截研究和有限本地试用，但还不是可以直接商用交付的安全产品。
 
 | 场景 | 当前程度 |
 | --- | --- |
 | 论文 demo / 项目展示 | 85% - 90% |
 | 内部实验平台 | 75% - 85% |
 | 小团队本地试用 | 55% - 65% |
-| 商用化安全产品 | 30% - 40% |
+| 商业安全产品 | 30% - 40% |
 
-最近验证状态：
+最近本地验证：
 
 ```text
-pytest -q --basetemp=.pytest_tmp_run         -> 97 passed
+pytest -q --basetemp=.pytest_tmp_run         -> 124 passed
 python -m compileall -q src tests            -> passed
 ruff check src tests                         -> passed
 cd web/studio && npm run build               -> passed
 ```
 
-## 已完成的核心能力
+## 核心创新点
 
-- OpenAI-compatible Gateway：支持 `/v1/chat/completions` 和最小 `/v1/responses` shape
-- Gateway bearer token 认证，非 loopback 暴露会显式告警
-- 每个 Gateway 请求隔离 `TaskContract` / `ContextGraph` / `SecretSentry`
-- Gateway-only 模式下不会释放 `allow_in_sandbox` tool call 给裸 agent
-- `allow / allow_in_sandbox / sandbox_then_approval / block` 语义已统一
-- `guard_action_ir()` 复用同一个 `ActionIR`，避免 lower 后重新 raw parse 丢失语义
-- OpenAI / Anthropic / Cline / OpenHands / Aider tool parser mapping
-- transcript provenance：支持 `SOURCE:`、JSONL action、`source_ids=...`
-- strict transcript mode：未知可执行行 fail-closed
-- compound command lowering：`npm test && rm -rf .` 会逐段治理
-- 文件路径 canonicalize：处理 traversal / symlink / hidden sensitive file
-- SecretSentry：secret read、egress-after-secret、stdout/stderr token、tainted file upload
-- PackageGuard：package manager parser、registry 检测、lockfile evidence、本地 metadata/provenance oracle
-- MCPProxy：token passthrough / destructive capability gate，结果进入 PolicyEngine
-- MemoryStore：tainted memory 不能授权高风险动作
-- SandboxRunner：dry-run / overlay preflight，测试命令不使用 `shell=True`
-- sandbox profile enforcement matrix，显式标记 `isolation_level` 和 `production_ready`
-- PolicyDecision：`policy_version`、`matched_rules`、`evidence_refs`、`rule_trace`
-- disabled policy mode 必须显式 unsafe flag，非 loopback Gateway 禁止 disabled
-- ApprovalCenter / ApprovalStore：稳定 action hash、request/grant/deny JSONL
-- GuardedExecAdapter：host execution started/completed audit，stdout/stderr 脱敏截断和 hash
-- AuditLog：线程安全 hash-chain、schema version、基础 event validation
-- Replay：hash-chain 与 policy evidence 引用校验
-- Studio Pro：全局 SSE 自动观测、运行时间线、证据图谱、审批、沙箱预检、清空记录可选备份
-- Bench：stage2/stage3 sample suite、gateway bench、baseline/ablation 报告框架
-
-## 主要架构
+项目最大的创新点是 **多源证据综合判断引擎**。RepoShield 不是只看工具名或黑名单，而是把多个证据源统一成事实，再通过 PolicyGraph 和 RuleIndex 形成可解释决策：
 
 ```text
-real agent
-  -> RepoShield Gateway / exec-guard / file-guard / PATH shim
-  -> ToolParserRegistry
-  -> InstructionIR
-  -> ActionIR
-  -> RepoShieldControlPlane
-      -> TaskContract
-      -> ContextGraph / provenance
-      -> SecretSentry
-      -> PackageGuard
-      -> MCPProxy / MemoryStore
-      -> SandboxRunner
-      -> PolicyEngine / PolicyRuntime
-      -> ApprovalCenter
-      -> AuditLog
-  -> allow / allow_in_sandbox / sandbox_then_approval / block
+Evidence -> Facts -> RuleIndex -> PolicyGraph -> Decision
 ```
+
+关键能力包括：
+
+- `FactKeyRegistry`：声明哪些事实可以安全参与索引，例如动作语义、来源可信度、任务边界、资产类型、依赖来源、沙箱观察。
+- `FactNormalizer`：把布尔、枚举、列表、数值区间统一成稳定索引键。
+- `RuleIndex`：用单事实命中、组合证据命中、残余规则兜底和保守安全剪枝缩小候选规则。
+- `PolicyGraph`：把不变量、领域规则、基线风险和决策格合并为最终结论。
+- Studio 前端：展示事实矩阵、规则候选缩小过程、谓词命中、证据图谱、沙箱证据和审批状态。
+
+详见：[PolicyGraph / RuleIndex 多源证据引擎](docs/POLICYGRAPH_RULEINDEX.zh-CN.md)。
+
+## 已完成能力
+
+- OpenAI-compatible Gateway，支持 `/v1/chat/completions` 和最小 `/v1/responses` shape
+- Gateway bearer token 认证，非 loopback 暴露时强制令牌
+- 每个请求隔离 `TaskContract`、`ContextGraph`、`SecretSentry`
+- 统一决策语义：`allow`、`allow_in_sandbox`、`sandbox_then_approval`、`block`
+- OpenAI、Anthropic、Cline、OpenClaw、OpenHands、Aider parser mapping
+- ToolIntrospector / ToolMappingRegistry，自动推断 OpenAI tools、MCP manifests 和 agent config
+- transcript provenance，支持 `SOURCE:`、JSONL action、`source_ids=...`
+- strict transcript mode，未知可执行行 fail-closed
+- compound command lowering，逐段治理复合 shell 命令
+- 文件路径 canonicalize，处理 traversal、symlink、隐藏敏感文件
+- SecretSentry，覆盖 secret read、egress-after-secret、token-like output、tainted file upload
+- PackageGuard，覆盖包管理器解析、依赖来源、lockfile evidence、本地 metadata/provenance oracle
+- MCPProxy 和 MemoryStore gate 集成控制面
+- SandboxRunner dry-run / overlay / preflight，并输出隔离能力标记
+- PolicyGraph / RuleIndex 多源证据检索、候选规则缩小和可解释 trace
+- ApprovalCenter / ApprovalStore，稳定 action hash、request/grant/deny JSONL
+- AuditLog hash-chain、schema version、replay evidence validation
+- Studio Pro 实时仪表盘，包含运行时间线、攻击演示、证据图谱、策略调试、审批中心、沙箱证据、评测报告、记录清空和可选备份
+- Stage2 / Stage3 bench、gateway bench、baseline / ablation 报告框架
 
 ## 快速开始
 
@@ -89,7 +76,7 @@ real agent
 python -m pip install -e ".[test]"
 ```
 
-启动 OpenAI-compatible Gateway：
+启动 Gateway：
 
 ```bash
 export OPENAI_API_KEY=sk-...
@@ -109,36 +96,6 @@ api_key  = reposhield-local
 model    = gpt-4.1
 ```
 
-如果使用 LongCat 这类 OpenAI-compatible 上游，把 Gateway 的 upstream 地址换成对应平台地址，例如：
-
-```bash
-export OPENAI_API_KEY=ak-your-longcat-key
-
-PYTHONPATH=src python -m reposhield gateway-start \
-  --repo ./your-repo \
-  --host 127.0.0.1 \
-  --port 8765 \
-  --upstream-base-url https://api.longcat.chat/openai
-```
-
-包装真实 shell 工具：
-
-```bash
-PYTHONPATH=src python -m reposhield exec-guard \
-  --repo ./your-repo \
-  --task "fix login button and run tests" \
-  -- npm test
-```
-
-初始化 repo-local agent 配置和 PATH shims：
-
-```bash
-PYTHONPATH=src python -m reposhield init-agent \
-  --repo ./your-repo \
-  --agent cline \
-  --task "fix login and run tests"
-```
-
 启动实时 Studio Pro：
 
 ```bash
@@ -150,49 +107,60 @@ PYTHONPATH=src python -m reposhield studio-server \
   --demo-mode
 ```
 
-打开 `http://127.0.0.1:8780` 后，页面会通过 `/api/events/stream` 自动接收真实 Gateway 事件；新的 OpenClaw / agent 请求会自动出现在左侧运行记录和中间时间线。
+打开：
+
+```text
+http://127.0.0.1:8780
+```
+
+Studio 会通过 `/api/events/stream` 自动接收真实 Gateway 事件，OpenClaw / OpenHands / Aider 等 agent 经过 RepoShield 后，新动作会自动出现在运行列表和时间线里。
+
+## OpenClaw 接入
+
+生成 OpenClaw provider 和启动脚本：
+
+```bash
+PYTHONPATH=src python -m reposhield openclaw-quickstart \
+  --repo ./your-repo \
+  --reposhield-home . \
+  --model gpt-4.1
+```
+
+OpenClaw 侧只需要配置本地 RepoShield 地址：
+
+```text
+base_url = http://127.0.0.1:8765/v1
+api_key  = reposhield-local
+```
+
+真实上游模型密钥只放在 RepoShield Gateway 进程里，不直接交给 OpenClaw。
 
 ## 决策语义
-
-全项目统一使用下面四类执行语义：
 
 | decision | 语义 |
 | --- | --- |
 | `allow` | 可以在宿主机执行 |
-| `allow_in_sandbox` | 只能在 sandbox / overlay / preflight 中执行，不能在宿主机直接执行 |
+| `allow_in_sandbox` | 只能在 sandbox / overlay / preflight 中执行，不能直接在宿主机执行 |
 | `sandbox_then_approval` | 不执行，生成审批请求或等待人工确认 |
 | `block` / `quarantine` | 不执行 |
 
-## 商用化差距
+## 仍需加强
 
-RepoShield 现在适合论文、演示、内部实验和小范围本地试用。要进入商用化，还需要重点补齐：
-
-1. **生产级 sandbox**  
-   当前是 dry-run / overlay / proxy preflight。商用需要 bubblewrap、containerd、Linux namespace、seccomp/eBPF、网络 egress monitor 等真实隔离。
-
-2. **真实供应链情报**  
-   当前有本地 metadata/provenance oracle。商用需要 npm/PyPI metadata、tarball inspection、Sigstore、typosquatting、maintainer reputation、lockfile diff。
-
-3. **真实 agent 适配和兼容测试**  
-   已有 parser mapping，但还需要持续采集 Codex/Cline/OpenHands/Aider 真实 tool traces，做 schema drift 测试。
-
-4. **策略和审批产品化**  
-   需要稳定策略语言、策略签名、租户级策略、审批 API/UI、权限模型、API key rotation。
-
-5. **Studio / Dashboard 产品化**  
-   当前已有本地交互式 Studio Pro、全局事件自动观测、trace graph、approval 操作和 policy debug。商用仍需要团队权限、搜索过滤、长期存储、差异对比和多项目视图。
-
-6. **实验体系增强**  
-   baseline/ablation 框架已有，仍需要更多真实 agent traces、攻击样本多样化、误报/漏报统计。
+- 生产级 sandbox：container、Linux namespace、seccomp/eBPF、网络监控等
+- 真实供应链情报：npm/PyPI metadata、tarball inspection、Sigstore、typosquatting、maintainer reputation
+- 更大规模真实 agent trace 兼容测试
+- 策略签名、租户策略、团队权限、API key rotation
+- Studio 的长期存储、跨项目搜索、多租户视图和团队协作能力
+- 更多真实样本上的误报、漏报和 ablation 指标
 
 ## 文档入口
 
 建议阅读顺序：
 
-1. [项目状态与商用化评估](docs/PROJECT_STATUS.zh-CN.md)
-2. [真实 Agent 接入指南](docs/REAL_AGENT_INTEGRATION.zh-CN.md)
-3. [Gateway 指南](docs/GATEWAY_GUIDE.zh-CN.md)
-4. [Agent exec-guard recipes](docs/AGENT_EXEC_GUARD_RECIPES.zh-CN.md)
-5. [Sandbox 指南](docs/SANDBOX_GUIDE.zh-CN.md)
+1. [文档目录](docs/README.zh-CN.md)
+2. [PolicyGraph / RuleIndex 多源证据引擎](docs/POLICYGRAPH_RULEINDEX.zh-CN.md)
+3. [Studio 指南](docs/STUDIO_GUIDE.zh-CN.md)
+4. [真实 Agent 接入指南](docs/REAL_AGENT_INTEGRATION.zh-CN.md)
+5. [Gateway 指南](docs/GATEWAY_GUIDE.zh-CN.md)
 6. [Policy Pack 指南](docs/POLICY_PACK_GUIDE.zh-CN.md)
-7. [文档目录](docs/README.zh-CN.md)
+7. [项目状态与商用化评估](docs/PROJECT_STATUS.zh-CN.md)

@@ -1,4 +1,4 @@
-# RepoShield / PepoShield v0.3
+﻿# RepoShield / PepoShield v0.3
 
 RepoShield is a pre-execution governance gateway for coding agents. It sits in front of model API responses, tool calls, shell commands, file operations, MCP tools, and package-manager actions, then decides whether each action can run on the host, only in a sandbox, only after approval, or not at all.
 
@@ -26,7 +26,7 @@ Approximate maturity:
 Latest local verification:
 
 ```text
-pytest -q --basetemp=.pytest_tmp_run         -> 97 passed
+pytest -q --basetemp=.pytest_tmp_run         -> 124 passed
 python -m compileall -q src tests            -> passed
 ruff check src tests                         -> passed
 cd web/studio && npm run build               -> passed
@@ -86,6 +86,7 @@ Studio Pro includes:
 - React Flow trace graph for source -> action -> decision -> evidence paths
 - Action detail drawer with ActionIR, source trust, matched rules, rule trace, and evidence refs
 - Policy Debugger with rule condition matrix
+- RuleIndex retrieval panel with indexed facts, composite evidence hits, residual rules, safe-prune explanation, candidate set, and reduction ratio
 - Approval Center with action-hash-bound grant/deny confirmation
 - Sandbox Evidence panels for process tree, network intent, file diff, and redacted trace
 - Bench & Report filters for suite and security result
@@ -177,6 +178,7 @@ It is designed to catch risks such as:
 - MCPProxy and MemoryStore gates integrated into the control plane
 - sandbox / overlay / dry-run preflight with explicit isolation capability markers
 - policy rule trace, evidence refs, policy version, and runtime modes
+- PolicyGraph multi-source evidence engine with FactKeyRegistry, FactNormalizer, RuleIndex retrieval trace, residual-rule fallback, and equivalence tests against full-scan evaluation
 - ApprovalCenter / ApprovalStore with stable action hashes
 - thread-safe hash-chain audit log with schema versioning
 - replay evidence validation
@@ -289,7 +291,7 @@ RepoShield is not yet commercial-ready. The largest remaining gaps are:
 - live package metadata, tarball inspection, Sigstore/provenance, and typosquatting checks
 - real agent trace collection and schema-drift compatibility tests
 - stable policy language, signed policies, tenant policy management, and approval APIs/UI
-- product-grade Studio/Dashboard with filtering, search, diff, trace graph, and policy debugging
+- production-grade Studio/Dashboard features such as team permissions, long-term storage, project-level search, and multi-tenant views
 - larger benchmark set with real agent traces and measured false-positive/false-negative rates
 
 See [Project Status and Commercialization Assessment](docs/PROJECT_STATUS.zh-CN.md) for the current roadmap.
@@ -299,8 +301,10 @@ See [Project Status and Commercialization Assessment](docs/PROJECT_STATUS.zh-CN.
 Chinese documentation is currently the most complete:
 
 1. [中文 README](README.zh-CN.md)
-2. [Project Status / 商用化评估](docs/PROJECT_STATUS.zh-CN.md)
-3. [Real Agent Integration](docs/REAL_AGENT_INTEGRATION.zh-CN.md)
-4. [Gateway Guide](docs/GATEWAY_GUIDE.zh-CN.md)
-5. [Agent exec-guard recipes](docs/AGENT_EXEC_GUARD_RECIPES.zh-CN.md)
-6. [Documentation Map](docs/README.zh-CN.md)
+2. [PolicyGraph / RuleIndex multi-source evidence engine](docs/POLICYGRAPH_RULEINDEX.zh-CN.md)
+3. [Project Status / Commercialization Assessment](docs/PROJECT_STATUS.zh-CN.md)
+4. [Studio Guide](docs/STUDIO_GUIDE.zh-CN.md)
+5. [Real Agent Integration](docs/REAL_AGENT_INTEGRATION.zh-CN.md)
+6. [Gateway Guide](docs/GATEWAY_GUIDE.zh-CN.md)
+7. [Documentation Map](docs/README.zh-CN.md)
+
